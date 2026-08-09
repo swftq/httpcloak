@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`Response.Location()` resolves the redirect target the way `net/http` does**: the standard library's `http.Response` has a `Location()` method that parses the `Location` header into a `*url.URL` and resolves it against the request URL, so a relative `/login` comes back as the full `https://host/login`. httpcloak responses only exposed the raw header string, which left anyone inspecting a 3xx with redirects disabled to re-implement that resolution by hand. The `Response` types in the root, `client`, and `transport` packages now carry the same method: it parses the header, resolves a relative target against the URL that produced the response (`FinalURL`), and returns the package's `ErrNoLocation` sentinel when no `Location` header is present — matching `net/http` semantics exactly, which is locked by a parity test that runs the same cases through both implementations.
+
 ### Fixed
 
 - **Headers the preset reserves no slot for now keep a stable order instead of a random one**: any header outside the impersonated browser's ordering table — custom `X-` headers, API tokens, signature headers — fell through to Go's map iteration in both the HTTP/1.1 writer and the HTTP/2 header encoder, and that iteration is deliberately randomised. The same four custom headers produced eight distinct arrangements across eight requests on HTTP/1.1, and seven across eight on HTTP/2. A header order that changes on every request is itself a strong signal, because no browser produces one, and it landed on exactly the requests most likely to be carrying something worth checking. Every header is now named up front, so nothing reaches the randomised fallback, and HTTP/1.1, HTTP/2 and HTTP/3 all agree on the result.
