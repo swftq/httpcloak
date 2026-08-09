@@ -812,6 +812,12 @@ func (p *HostPool) dialHTTPProxy(ctx context.Context, proxy *proxyConfig) (net.C
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to proxy: %w", err)
 	}
+	clearDeadline, err := armProxyHandshakeDeadline(ctx, conn, p.connectTimeout)
+	if err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("failed to set proxy handshake deadline: %w", err)
+	}
+	defer clearDeadline()
 
 	// Send CONNECT request
 	targetAddr := net.JoinHostPort(p.host, p.port)
@@ -871,6 +877,12 @@ func (p *HostPool) dialSOCKS5Proxy(ctx context.Context, proxy *proxyConfig) (net
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to SOCKS5 proxy: %w", err)
 	}
+	clearDeadline, err := armProxyHandshakeDeadline(ctx, conn, p.connectTimeout)
+	if err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("failed to set SOCKS5 handshake deadline: %w", err)
+	}
+	defer clearDeadline()
 
 	// SOCKS5 handshake
 	// Version 5, 1 auth method (no auth or username/password)
