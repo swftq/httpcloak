@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **`client.Client` sends the preset's `Accept-Encoding` and `Accept-Language` on no-cors requests**: a request with `FetchModeNoCors` always sent Chrome's `gzip, deflate, br, zstd` and `en-US,en;q=0.9`, while navigations and CORS requests from the same client sent the preset's own values. So `safari-18`, `safari-18-ios`, `safari-17-ios`, `chrome-143-ios` through `chrome-147-ios` and the `firefox-133` presets advertised zstd on subresource loads only, `firefox-133` sent `q=0.9` there instead of its `en-US,en;q=0.5`, and `chrome-144-macos` dropped its `en-GB` list. A browser sends one pair on every request a page makes. Chrome 156 and Firefox 159 over HTTP/2 and HTTP/1.1, and Safari 26.3 on macOS over HTTP/1.1, HTTP/2 and HTTP/3 and on iOS over HTTP/1.1 and HTTP/2, each sent the same pair on navigations, iframes, `fetch()`, XHR and stylesheet, script and image loads, and Safari on font loads too. No-cors requests now take the preset's values the way the other modes do. Sessions and the bindings were not affected: they already sent the preset's values on every request.
+
 ## [1.7.3] - 2026-10-14
 
 ### Added
