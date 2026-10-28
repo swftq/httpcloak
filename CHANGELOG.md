@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **A `client.Client` redirect hop sends the `Sec-Fetch-Site` a browser would**: every hop repeated the first request's value. So a `fetch()` sent as `same-origin` and redirected to another site still said `same-origin` there, and again on the hop back. Chrome 156 and Firefox 159 were captured on 100 requests moving between a page's origin, another host on its site, another port and another site. They sent the same value on every hop: the most cross-site relation between the page and any URL in the chain so far. So the value only moves towards `cross-site`, a chain that comes back keeps what it reached, and a typed navigation's `none` stays `none`. Each hop now works it out the same way, by the rule the session follows:
+  - `same-origin` becomes `same-site` on another host or port of its site, and `cross-site` on another site.
+  - `same-site` becomes `cross-site` off its site.
+  - `none` and `cross-site` never change.
+
+  A site is the scheme plus the registrable domain from the public suffix list. A `Sec-Fetch-Site` you set in the request's headers follows the same rule, with `WithTLSOnly` too.
+
 ## [1.7.3] - 2026-10-14
 
 ### Added
