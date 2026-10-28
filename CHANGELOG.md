@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **A redirect hop carries the request's own `Referer`, not the URL that redirected**: the session built each hop's `Referer` from the URL that answered with the 3xx. So a page's redirected `fetch()` named the endpoint that redirected it, and the GET after a form POST's 303 named the form's action. A request sent with no `Referer` at all, a typed navigation among them, gained one on its first hop. Chrome 156 and Firefox 159 were captured on redirected `fetch()`, XHR, iframe and form POST requests over HTTP/1.1 and HTTP/2. Both send the request's own `Referer` on every hop, and none when it had none.
+
+  Each hop applies the default `strict-origin-when-cross-origin` policy again for its new URL. The `Referer` goes unchanged while the hop stays on its origin, is cut to that origin when the hop leaves, and is not sent after an https to http downgrade. The browsers start each hop from what the previous one sent, so once cut it stays cut and once dropped it stays dropped, even where the chain comes back to the page's origin. There the session used to send the origin of whichever host redirected last. WebKit's source carries it the same way, and the session code is the same for every preset. `DisableRedirectReferer` still sends no `Referer` on any hop after the first.
+
+  With `ExactHeaders`, a `Referer` pair now follows the same rule in its own slot and spelling. It used to go out verbatim on every hop, after an https to http downgrade and with `DisableRedirectReferer` too, because the session's hop `Referer` never reaches the wire in that mode. A list with no `Referer` pair still gains none. If the hop must drop a `Referer` that is the only pair, the list would be left empty, and an empty list means no exact mode at all. The session returns the 3xx with an error there instead of sending the preset's headers.
+
 ## [1.7.3] - 2026-10-14
 
 ### Added

@@ -237,6 +237,12 @@ type Request struct {
 	// caller headers. Connection is not: a capture that carries none cannot
 	// have one added back, and HTTP/1.1 keeps the connection alive by default
 	// anyway, so nothing is lost by leaving it out.
+	//
+	// When the session follows a redirect, every hop sends the same pairs,
+	// except that a Referer pair is carried the way a browser carries the
+	// header. It stays in its slot and spelling, is cut to its origin when the
+	// hop leaves that origin, and is left out after an https to http downgrade
+	// or when DisableRedirectReferer is set. A list without one never gains one.
 	ExactHeaders []fingerprint.HeaderPair
 
 	// TLSOnly is a per-request override for TLS-only mode.
@@ -271,19 +277,20 @@ type Request struct {
 	// request. Session-layer concept; the transport does not consult this field.
 	DisableHighEntropyClientHints bool
 
-	// DisableRedirectReferer, when true, stops the session layer synthesising a
-	// Referer on each redirect hop. Session-layer concept; the transport does
-	// not consult this field.
+	// DisableRedirectReferer, when true, stops the session layer carrying the
+	// request's Referer onto its redirect hops. Session-layer concept; the
+	// transport does not consult this field.
 	//
-	// The synthesised value follows Chrome's default
-	// strict-origin-when-cross-origin policy, so leaving this off is what a
-	// browser does and is almost always what you want. It exists for callers
-	// mirroring a client that sends no Referer at all, or reproducing a captured
-	// chain verbatim, where a policy-correct header is still the wrong bytes.
+	// By default each hop carries the Referer of the hop before it with
+	// Chrome's default strict-origin-when-cross-origin policy applied again for
+	// the new URL, which is what Chrome and Firefox do, so leaving this off is
+	// almost always what you want. It exists for callers mirroring a client
+	// that sends no Referer on a redirect, or reproducing a captured chain
+	// verbatim, where a policy-correct header is still the wrong bytes.
 	//
-	// Setting it does not merely skip the synthesis: no Referer is sent on the
-	// hop at all, including one the caller set on the original request, because
-	// carrying that one forward would leak the pre-redirect URL to the new host.
+	// When set, no Referer is sent on any hop after the first, including one
+	// the caller set on the original request, because carrying that forward
+	// would hand the new host what the caller asked not to send.
 	DisableRedirectReferer bool
 
 	// HeaderOrder, when non-empty, is the header order for THIS request only and

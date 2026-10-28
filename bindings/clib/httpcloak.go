@@ -189,10 +189,11 @@ type RequestConfig struct {
 	DisableClientHints            bool `json:"disable_client_hints,omitempty"`
 	DisableHighEntropyClientHints bool `json:"disable_high_entropy_client_hints,omitempty"`
 
-	// DisableRedirectReferer stops a Referer being added on redirect hops. By
-	// default one is synthesised per Chrome's strict-origin-when-cross-origin
-	// policy, which is what a browser does. When set, no Referer reaches the
-	// next hop at all, including one the caller set on the original request.
+	// DisableRedirectReferer stops the request's Referer being carried onto
+	// redirect hops. By default each hop carries it as a browser does, with
+	// Chrome's strict-origin-when-cross-origin policy applied again for the new
+	// URL. When set, no Referer reaches any hop after the first, including one
+	// the caller set on the original request.
 	DisableRedirectReferer bool `json:"disable_redirect_referer,omitempty"`
 }
 
@@ -1487,10 +1488,11 @@ type RequestOptions struct {
 	DisableClientHints            bool `json:"disable_client_hints,omitempty"`
 	DisableHighEntropyClientHints bool `json:"disable_high_entropy_client_hints,omitempty"`
 
-	// DisableRedirectReferer stops a Referer being added on redirect hops. By
-	// default one is synthesised per Chrome's strict-origin-when-cross-origin
-	// policy, which is what a browser does. When set, no Referer reaches the
-	// next hop at all, including one the caller set on the original request.
+	// DisableRedirectReferer stops the request's Referer being carried onto
+	// redirect hops. By default each hop carries it as a browser does, with
+	// Chrome's strict-origin-when-cross-origin policy applied again for the new
+	// URL. When set, no Referer reaches any hop after the first, including one
+	// the caller set on the original request.
 	DisableRedirectReferer bool `json:"disable_redirect_referer,omitempty"`
 	// BodyEncoding controls how the request body string is interpreted by
 	// post_async / get_async style entry points where the body is passed as

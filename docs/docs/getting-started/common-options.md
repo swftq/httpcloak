@@ -99,14 +99,24 @@ With redirects off, a 301 or 302 comes back as the response, body and all, with 
 
 ### The Referer on a redirect hop
 
-Each hop carries a `Referer` built the way a browser builds one, following Chrome's
-default policy: the full previous URL when the hop stays on the same origin, the
-origin alone when it crosses to another, and nothing at all on an https to http
-downgrade. That is what a browser sends, so leave it alone unless you have a
-reason not to.
+Each hop carries the request's own `Referer`, the way Chrome and Firefox carry it.
+It is never the URL that answered with the redirect: a request sent with
+`Referer: https://shop.example/cart` sends that on every hop. Chrome's default
+policy is applied again for each new URL:
+
+- The `Referer` goes unchanged while the hop stays on its origin.
+- It is cut to the origin alone (`https://shop.example/`) when the hop leaves.
+- It is dropped after an https to http downgrade.
+
+Each hop starts from what the hop before it sent. So once the `Referer` is cut
+down it stays cut down, and once it is dropped it stays dropped, even if the chain
+comes back. A request sent without a `Referer`, like a typed navigation, sends
+none on its hops either. That is what a browser sends, so leave it alone unless
+you have a reason not to.
 
 `disable_redirect_referer` turns it off, for reproducing a client that sends no
-`Referer` at all, or replaying a captured chain verbatim.
+`Referer` on a redirect, or replaying a captured chain verbatim. The original
+request still sends the `Referer` you gave it; none of the hops after it do.
 
 <Tabs groupId="lang">
 <TabItem value="go" label="Go">
