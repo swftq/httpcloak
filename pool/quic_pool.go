@@ -16,6 +16,7 @@ import (
 	"github.com/sardanioss/httpcloak/dns"
 	"github.com/sardanioss/httpcloak/fingerprint"
 	"github.com/sardanioss/httpcloak/internal/h3build"
+	"github.com/sardanioss/httpcloak/internal/happyeyeballs"
 	"github.com/sardanioss/httpcloak/transport"
 	"github.com/sardanioss/quic-go"
 	"github.com/sardanioss/quic-go/http3"
@@ -509,16 +510,22 @@ func (p *QUICHostPool) createConn(ctx context.Context) (*QUICConn, error) {
 	// hello: the request worked and carried a fingerprint nobody chose.
 	// The resuming hello is used ONLY when resuming a session (matches proxy
 	// path behavior); offering it on a fresh connection fails on some servers.
+	// resolveSpec builds it, and each raced attempt below calls it again for
+	// a spec of its own.
+	wantPSK := session != nil && p.cachedPSKSpec != nil && fingerprint.HasQUICPSKVariant(p.preset)
+	resolveSpec := func() (*utls.ClientHelloSpec, fingerprint.ClientHelloSource, error) {
+		spec, source, err := fingerprint.ResolveQUICClientHelloSpec(p.preset, wantPSK, p.shuffleSeed)
+		if err == nil && wantPSK {
+			// early_data only on a ticket that allows it, as the transport does
+			h3build.DropEarlyDataUnlessAllowed(spec, p.preset, session)
+		}
+		return spec, source, err
+	}
 	var additionalParams map[uint64][]byte
 	if p.preset != nil {
-		wantPSK := session != nil && p.cachedPSKSpec != nil && fingerprint.HasQUICPSKVariant(p.preset)
-		spec, source, err := fingerprint.ResolveQUICClientHelloSpec(p.preset, wantPSK, p.shuffleSeed)
+		spec, source, err := resolveSpec()
 		switch {
 		case err == nil:
-			if wantPSK {
-				// early_data only on a ticket that allows it, as the transport does
-				h3build.DropEarlyDataUnlessAllowed(spec, p.preset, session)
-			}
 			selectedSpec = spec
 			if source == fingerprint.SourceClientHelloID {
 				if wantPSK && p.preset.QUICPSKClientHelloID.Client != "" {
@@ -617,7 +624,25 @@ func (p *QUICHostPool) createConn(ctx context.Context) (*QUICConn, error) {
 	// Capture localAddr for the dial closure
 	localAddr := p.localAddr
 
-	// Create HTTP/3 transport - simple sequential dial (no racing for fingerprint consistency)
+	// attemptConfig gives each raced attempt its own config and its own
+	// ClientHello spec, built by resolveSpec as the first one was: the same
+	// hello, and early_data only on a ticket that allows it. quic-go applies
+	// the spec in place, so two attempts sharing one corrupt each other's
+	// ClientHello. This dial was made sequential in the change that began
+	// sharing one spec across dials.
+	attemptConfig := func(cfg *quic.Config) (*quic.Config, error) {
+		c := cfg.Clone()
+		if c.CachedClientHelloSpec != nil {
+			spec, _, err := resolveSpec()
+			if err != nil {
+				return nil, err
+			}
+			c.CachedClientHelloSpec = spec
+		}
+		return c, nil
+	}
+
+	// Create HTTP/3 transport
 	h3Transport := &http3.Transport{
 		TLSClientConfig:        tlsConfig,
 		QUICConfig:             quicConfig,
@@ -629,54 +654,30 @@ func (p *QUICHostPool) createConn(ctx context.Context) (*QUICConn, error) {
 		// same setting in internal/h2build.
 		DisableCompression: true,
 		Dial: func(ctx context.Context, addr string, tlsCfg *tls.Config, cfg *quic.Config) (*quic.Conn, error) {
-			// Combine all IPs, preferred first
-			allIPs := append(preferredIPs, fallbackIPs...)
-			if len(allIPs) == 0 {
+			// Families interleaved, preferred first, as the transport orders them
+			ips := happyeyeballs.Interleave(preferredIPs, fallbackIPs)
+			if len(ips) == 0 {
 				return nil, fmt.Errorf("no IP addresses available for %s", addr)
 			}
 
-			var lastErr error
-			for _, remoteIP := range allIPs {
-				network := "udp4"
-				if remoteIP.To4() == nil {
-					network = "udp6"
-				}
-				udpAddr := &net.UDPAddr{IP: remoteIP, Port: port}
-
-				// Create local UDP address if specified (for IPv6 rotation)
-				var localUDPAddr *net.UDPAddr
-				if localAddr != "" {
-					localUDPAddr = &net.UDPAddr{IP: net.ParseIP(localAddr)}
-				}
-
-				udpConn, err := net.ListenUDP(network, localUDPAddr)
-				if err != nil {
-					lastErr = err
-					continue
-				}
-
-				// Use quic.Transport.DialEarly instead of quic.DialEarly directly
-				// This matches the proxy path behavior and handles ECH/GREASE correctly
-				quicTransport := &quic.Transport{
-					Conn:                         udpConn,
-					ConnectionIDLength:           p.preset.H3QUICConnectionIDLength(),
-					AllowZeroLengthConnectionIDs: true,
-				}
-
-				conn, err := quicTransport.DialEarly(ctx, udpAddr, tlsCfg, cfg)
-				if err != nil {
-					quicTransport.Close()
-					lastErr = err
-					continue
-				}
-
-				return conn, nil
+			// Raced with the Session's HTTP/3 attempt delay (happyEyeballsDialQUIC),
+			// not tried one after another. A QUIC attempt to an address that never
+			// answers does not fail, so the next address waited out the whole 5 s
+			// handshake timeout.
+			a, err := happyeyeballs.Race(ctx, len(ips), 250*time.Millisecond,
+				func(ctx context.Context, idx int) (quicAttempt, error) {
+					attemptCfg, err := attemptConfig(cfg)
+					if err != nil {
+						return quicAttempt{}, err
+					}
+					return p.dialAttempt(ctx, ips[idx], port, localAddr, tlsCfg, attemptCfg)
+				},
+				quicAttempt.close,
+			)
+			if err != nil {
+				return nil, err
 			}
-
-			if lastErr != nil {
-				return nil, lastErr
-			}
-			return nil, fmt.Errorf("all QUIC connection attempts failed for %s", addr)
+			return a.conn, nil
 		},
 	}
 
@@ -691,6 +692,61 @@ func (p *QUICHostPool) createConn(ctx context.Context) (*QUICConn, error) {
 	}
 
 	return conn, nil
+}
+
+// quicAttempt is one raced HTTP/3 dial and the UDP socket it owns.
+type quicAttempt struct {
+	conn *quic.Conn
+	tr   *quic.Transport
+	udp  *net.UDPConn
+}
+
+// close ends an attempt that failed or lost the race. Closing its
+// quic.Transport destroys the connection without sending CONNECTION_CLOSE,
+// which is how Chromium drops a QUIC attempt it no longer needs
+// (QuicSessionAttempt::Cancel closes with SILENT_CLOSE). quic.Transport.Close
+// leaves a socket it was handed open, so the socket is closed here too.
+func (a quicAttempt) close() {
+	a.tr.Close()
+	a.udp.Close()
+}
+
+// dialAttempt makes one QUIC attempt to remoteIP on a UDP socket of its own.
+func (p *QUICHostPool) dialAttempt(ctx context.Context, remoteIP net.IP, port int, localAddr string, tlsCfg *tls.Config, cfg *quic.Config) (quicAttempt, error) {
+	network := "udp4"
+	if remoteIP.To4() == nil {
+		network = "udp6"
+	}
+	udpAddr := &net.UDPAddr{IP: remoteIP, Port: port}
+
+	// Create local UDP address if specified (for IPv6 rotation)
+	var localUDPAddr *net.UDPAddr
+	if localAddr != "" {
+		localUDPAddr = &net.UDPAddr{IP: net.ParseIP(localAddr)}
+	}
+
+	udpConn, err := net.ListenUDP(network, localUDPAddr)
+	if err != nil {
+		return quicAttempt{}, err
+	}
+
+	// Use quic.Transport.DialEarly instead of quic.DialEarly directly
+	// This matches the proxy path behavior and handles ECH/GREASE correctly
+	a := quicAttempt{
+		tr: &quic.Transport{
+			Conn:                         udpConn,
+			ConnectionIDLength:           p.preset.H3QUICConnectionIDLength(),
+			AllowZeroLengthConnectionIDs: true,
+		},
+		udp: udpConn,
+	}
+
+	a.conn, err = a.tr.DialEarly(ctx, udpAddr, tlsCfg, cfg)
+	if err != nil {
+		a.close()
+		return quicAttempt{}, err
+	}
+	return a, nil
 }
 
 // CloseIdle closes connections that have been idle too long.
