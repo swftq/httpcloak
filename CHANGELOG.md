@@ -163,6 +163,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **A redirect hop no longer repeats the previous request's `Authorization`**: a same-origin hop carried every header the request before it sent, including the `Authorization` the client's `Auth` had written for that request. Usually `Auth` wrote a fresh one over it, but when it had nothing to add, as a `DigestAuth` whose nonce the server had refused, the previous answer went out again, naming the wrong URI. Only an `Authorization` you set yourself follows a hop now; the client's `Auth` writes its own.
 
+- **`fingerprint.HeaderCoherence` writes no `Sec-Fetch-User` for the Safari and iOS Chrome presets**: `ApplyToHeaders`, and with it `GenerateNavigationHeaders`, set `Sec-Fetch-User: ?1` on a user-triggered navigation whatever the preset, so they handed it back for `safari-18` or `chrome-155-ios` although WebKit has never sent it (see the entry above). They now follow the preset the way `client.Client` does: a preset that sends the other Fetch Metadata headers but not this one gets none, and `ApplyToHeaders` removes one already in the map. `GenerateSecFetchHeaders` takes no preset and still returns `?1` for a user-triggered navigation. Nothing on the wire changes, because no session, client or binding path calls `HeaderCoherence`.
+
 ## [1.7.3] - 2026-10-14
 
 ### Added
