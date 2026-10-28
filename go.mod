@@ -30,3 +30,9 @@ require (
 	golang.org/x/text v0.32.0 // indirect
 	golang.org/x/tools v0.39.0 // indirect
 )
+
+// Local build of sardanioss/quic-go carrying Conn.CloseWithTransportError,
+// the ACK bundled with CONNECTION_CLOSE, and http3.Transport.CloseConn
+// (branch feat/close-with-transport-error). Drop this and require the tag
+// once that change is released.
+replace github.com/sardanioss/quic-go => D:/go-repos/src/github.com/sardanioss/quic-go
