@@ -411,6 +411,9 @@ func (s *Session) requestWithRedirects(ctx context.Context, req *transport.Reque
 	// bytes.Reader over it on every Do.
 	bodyReplayable := req.BodyReader == nil || req.GetBody != nil
 
+	// Whether this response's Accept-CH is remembered; see learnsAcceptCH.
+	learnsCH := s.learnsAcceptCH(req)
+
 	for attempt := 0; attempt <= maxRetries; attempt++ {
 		// Build Cookie header fresh each attempt from original + session cookies.
 		// Skip the jar lookup entirely when WithoutCookieJar — caller-provided
@@ -459,7 +462,9 @@ func (s *Session) requestWithRedirects(ctx context.Context, req *transport.Reque
 				s.extractCookies(resp.Headers, req.URL)
 			}
 			// Also parse Accept-CH from intermediate responses
-			s.parseAcceptCH(host, resp.Headers)
+			if learnsCH {
+				s.parseAcceptCH(host, resp.Headers)
+			}
 		}
 
 		// Check if we should retry
@@ -509,7 +514,9 @@ func (s *Session) requestWithRedirects(ctx context.Context, req *transport.Reque
 	}
 
 	// Parse Accept-CH header to store requested client hints for this host
-	s.parseAcceptCH(host, resp.Headers)
+	if learnsCH {
+		s.parseAcceptCH(host, resp.Headers)
+	}
 
 	// Store cache validation headers from response for future requests, unless
 	// the conditional cache is disabled session-wide or the caller asked to
@@ -973,6 +980,19 @@ func (s *Session) storeCacheHeaders(url string, headers map[string][]string) {
 		etag:         etag,
 		lastModified: lastModified,
 	}
+}
+
+// learnsAcceptCH reports whether the Accept-CH on the response to req is
+// remembered. Chrome parses Accept-CH only on the response to an outermost
+// main-frame navigation (ParseAndPersistAcceptCHForNavigation in
+// content/browser/client_hints/client_hints.cc), so a frame's document, a
+// fetch and a subresource can ask for hints and get none. That is the request
+// sent with Sec-Fetch-Dest: document. One sent with no Sec-Fetch-Dest at all,
+// TLS-only or a preset that sends no Sec-Fetch metadata, says nothing either
+// way and is treated as a navigation, as every request used to be.
+func (s *Session) learnsAcceptCH(req *transport.Request) bool {
+	dest := s.transport.SentFetchDest(req)
+	return dest == "" || strings.EqualFold(dest, "document")
 }
 
 // parseAcceptCH parses the Accept-CH response header and stores the requested client hints

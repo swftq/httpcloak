@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **`Accept-CH` is learned only from a top-level navigation**: the session recorded `Accept-CH` from every response, so an iframe's document, a `fetch()` or a subresource asking for high-entropy client hints got them on every later request to its host. Chrome parses `Accept-CH` only on the response to an outermost main-frame navigation (`ParseAndPersistAcceptCHForNavigation`). On Cloudflare's challenge the iframe answers with `Accept-CH` and `Critical-CH` naming five hints, Chrome sent none of them to that host afterwards, and the session sent all five on every frame-side request. A response now teaches the session only when its request went out with `Sec-Fetch-Dest: document`, or with no `Sec-Fetch-Dest` at all (TLS-only, or a preset without Sec-Fetch metadata), which keeps the old behaviour where there is nothing to go on. `Transport.SentFetchDest` reports the `Sec-Fetch-Dest` a request goes out with.
+
 ## [1.7.3] - 2026-10-14
 
 ### Added
