@@ -68,7 +68,9 @@ Flow on the wire:
 4. Client retries the same request, this time with the computed `Digest response=...`.
 5. Server returns the real response.
 
-The nonce-counter (`nc`) increments on every reuse, so the same `DigestAuth` value can ride multiple requests without re-challenging. Discard it once the credentials change.
+If the server answers that response with another challenge, the credentials were wrong. The client returns that 401 rather than answering again, and forgets the challenge, so the next request starts over with no Authorization header. That is where Chrome and Firefox drop the credentials and ask the user, and where curl returns the 401. The exception is a challenge with `stale=true`: the nonce expired, but the credentials were right. The client then sends the request again with an answer to the new nonce. A hop's request goes out at most 32 times, as in Chrome, after which the last 401 comes back. The bound holds for any `Auth` whose `HandleChallenge` keeps asking for a retry.
+
+The nonce-counter (`nc`) starts at `00000001` for each challenge and increments on every reuse, so the same `DigestAuth` value can ride multiple requests without re-challenging. Discard it once the credentials change.
 
 ## Custom schemes via SetAuth
 

@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **`client.Client` stops answering a Digest challenge once the server has refused its answer**: a 401 to a request that already carried a Digest answer was answered again, and so was the next one, with no limit. A wrong password had the request sent until the client's timeout ran out: 9,459 requests in 2 seconds, measured. Chrome 156, Firefox 159 and curl 8.11.0 were measured against a server that refuses every answer. Each sent one answer and stopped: the browsers dropped the credentials and asked the user again, and curl returned the 401. Now the 401 goes back to the caller after one answer, and the refused challenge is forgotten, so the next request starts over without an answer. The same goes for a request that answered the last challenge up front: when the server has moved to a new nonce without saying `stale=true`, that request returns the 401, and the one after it is challenged afresh. A challenge with `stale=true` is still answered again, as in all three: the nonce expired, but the credentials were right. One hop's request goes out at most 32 times, which is Chrome's bound (curl stopped at 51, and Firefox was still resending after 15 seconds), and then the last 401 comes back. The bound holds for any `Auth` whose `HandleChallenge` keeps asking for a retry.
+
+  The first answer to a challenge also went out with `nc=00000002`, where RFC 7616 starts the count at `00000001`. The answer was applied once to the request about to be dropped, and again to the one sent. It now carries `00000001`, and so does the first answer to each later challenge, as in all three, with nothing of an earlier challenge carried into it. A `DigestAuth` reused across requests still counts on from there while the nonce stays the same, as Chrome and Firefox do.
+
 ## [1.7.3] - 2026-10-14
 
 ### Added
