@@ -30,3 +30,8 @@ require (
 	golang.org/x/text v0.32.0 // indirect
 	golang.org/x/tools v0.39.0 // indirect
 )
+
+// Local build of sardanioss/net carrying Transport.FirstStreamID and
+// Transport.StreamWindowUpdate (branch feat/first-stream-id-and-stream-window-update).
+// Drop this and require the tag once that change is released.
+replace github.com/sardanioss/net => D:/go-repos/src/github.com/sardanioss/net
