@@ -16,7 +16,7 @@ The dispatcher in `transport/transport.go` is one function, `doAuto`. The steps 
 
 1. Look up the host in the `protocolSupport` cache. If a prior request already learned this host's best protocol, skip the race and dial that directly.
 2. Otherwise fire two goroutines: one dials H3 over UDP via QUIC, the other dials H2 over TCP+TLS.
-3. Take the first success. Cancel the loser.
+3. Take the first success and send the request on the connection it made, as Chrome does with the connection its race produced. Cancel the loser. A QUIC attempt that loses but still finishes its handshake is dropped without a `CONNECTION_CLOSE`, the way Chromium drops a QUIC session it no longer needs.
 4. If H2's TLS handshake came back with `http/1.1` in ALPN (`ALPNMismatchError`), reuse that same TLS connection for an H1 request. No second handshake.
 5. If both attempts fail (or the 6-second race budget elapses), fall through to H1 on a fresh TCP connection. There's no extra H2 retry; H2 already had its shot inside the race. This fallback never sends a request twice: it runs only when nothing of the first attempt reached the server (no connection could be had), or when the request is idempotent (GET, HEAD, OPTIONS, TRACE, PUT, DELETE) and its body is held in memory. A POST whose stream failed after it went out returns that error instead, as it does in Chrome.
 6. Cache the winning protocol in `protocolSupport[host]` so the next request to the same host skips the race. Step 5's fallback is the exception: an H1 response served only because the H2 attempt failed says nothing about the host, so it is not cached, and the next request races again. An ALPN downgrade (step 4) is a fact about the host and is cached.

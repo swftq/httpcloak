@@ -1746,25 +1746,41 @@ type connectDecision struct {
 	protocol Protocol
 	alpnErr  *ALPNMismatchError
 	err      error
+
+	// releaseH3 is set when H3 won. The race's QUIC connection waits for the
+	// request's dial to take it; call releaseH3 once the request has gone out,
+	// to drop the connection if the request went out on another one instead.
+	releaseH3 func()
 }
 
 // raceConnectProtocol races H3 and H2 connection probes and reports which
 // established first, performing no application request. Keeping the request out
 // of the race means it is safe for both buffered and streaming dispatch (the
 // request is sent exactly once, on the winner) and for non-idempotent methods.
+// The winner's connection is the one the request goes out on, for H3 as for
+// H2: the H2 probe leaves its connection in the pool, and the H3 one leaves
+// its connection for the request's dial (h3Race).
 //
-// Both Connect() probes tunnel through the configured proxy when one is set, so
-// this never makes a direct (real-IP) dial. It eliminates the multi-second
-// stall that a sequential "try H3 first" path pays whenever QUIC is blocked or
-// the proxy cannot relay UDP: H2 simply wins the race in well under a second.
+// Both probes dial the way a request does, through the configured proxy when
+// one is set, so this never makes a direct (real-IP) dial. It eliminates the
+// multi-second stall that a sequential "try H3 first" path pays whenever QUIC
+// is blocked or the proxy cannot relay UDP: H2 simply wins the race in well
+// under a second.
 func (t *Transport) raceConnectProtocol(ctx context.Context, host, port string) connectDecision {
 	// Snapshot the sub-transports so a concurrent SetProxy/SetPreset swap can't
 	// race the pointer reads inside the probe closures.
 	snap := t.snapshot()
-	return raceTwoProbes(ctx, 6*time.Second,
-		func(c context.Context) error { return snap.h3.Connect(c, host, port) },
+	h3 := snap.h3.newRace(host, port)
+	d := raceTwoProbes(ctx, 6*time.Second,
+		h3.connect,
 		func(c context.Context) error { return snap.h2.Connect(c, host, port) },
 	)
+	if d.err == nil && d.alpnErr == nil && d.protocol == ProtocolHTTP3 {
+		d.releaseH3 = h3.won()
+	} else {
+		h3.lose()
+	}
+	return d
 }
 
 // raceTwoProbes runs the H3 and H2 connection probes concurrently under a
@@ -1957,6 +1973,7 @@ func (t *Transport) raceH3H2(ctx context.Context, req *Request) (*Response, Prot
 	switch decision.protocol {
 	case ProtocolHTTP3:
 		resp, err := t.doHTTP3(ctx, req)
+		decision.releaseH3()
 		return resp, ProtocolHTTP3, err
 	default: // ProtocolHTTP2 (also the no-winner default)
 		resp, err := t.doHTTP2(ctx, req)

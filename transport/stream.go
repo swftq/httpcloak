@@ -335,6 +335,7 @@ func (t *Transport) doStreamAuto(ctx context.Context, req *Request) (*StreamResp
 			return resp, err
 		case decision.protocol == ProtocolHTTP3:
 			resp, err := t.doStreamHTTP3(ctx, req)
+			decision.releaseH3()
 			if err == nil {
 				t.cacheProtocol(host, ProtocolHTTP3)
 				return resp, nil
