@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`Session.AcceptCH`, `Session.ClientHintsFor` and `Session.SetAcceptCH`**: what a session learned from each host's `Accept-CH` can now be read and set. `AcceptCH(host)` is the hint names the host asked for; `ClientHintsFor(host)` is the high-entropy hints, with their values, that the session adds to its next request there, from the same map the request path reads; `SetAcceptCH(host, hints)` replaces what the session has from the host, and an empty list forgets it. A session rebuilt from state kept elsewhere can be given what its hosts asked for before its first request. Go only for now.
+
+### Fixed
+
+- **A saved session keeps what each host asked for in `Accept-CH`**: `Save` and `Marshal` dropped it, so the first request after `LoadSession` or `UnmarshalSession` went to a host without the high-entropy client hints it had asked for, and the second carried them. Chrome keeps each host's `Accept-CH` in the profile across restarts and sends the hints on the first request. The session file gains an optional `accept_ch` key; older files load as before, with nothing learned.
+
 ## [1.7.3] - 2026-10-14
 
 ### Added
