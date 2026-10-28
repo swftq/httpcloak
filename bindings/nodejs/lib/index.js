@@ -1996,7 +1996,7 @@ class Session {
     // The get_raw entry has no exact_headers field, so a caller asking for one
     // goes down the generic request path instead of having it dropped in silence.
     if (options.exactHeaders) return this.requestSync("GET", url, options);
-    const { headers = null, params = null, cookies = null, auth = null, fetchMode = null, allowRedirects = null, disableConditionalCache = false, disableClientHints = false, disableHighEntropyClientHints = false, disableRedirectReferer = false } = options;
+    const { headers = null, params = null, cookies = null, auth = null, fetchMode = null, allowRedirects = null, disableConditionalCache = false, disableClientHints = false, disableHighEntropyClientHints = false, disableRedirectReferer = false, initiator = null } = options;
 
     url = addParamsToUrl(url, params);
     let mergedHeaders = this._mergeHeaders(headers);
@@ -2018,6 +2018,9 @@ class Session {
     }
     if (disableRedirectReferer) {
       reqOptions.disable_redirect_referer = true;
+    }
+    if (initiator) {
+      reqOptions.initiator = initiator;
     }
     if (disableConditionalCache) {
       reqOptions.disable_conditional_cache = true;
@@ -2061,7 +2064,7 @@ class Session {
     // The post_raw entry has no exact_headers field, so a caller asking for one
     // goes down the generic request path instead of having it dropped in silence.
     if (options.exactHeaders) return this.requestSync("POST", url, options);
-    let { body = null, json = null, data = null, files = null, headers = null, params = null, cookies = null, auth = null, fetchMode = null, allowRedirects = null, disableConditionalCache = false, disableClientHints = false, disableHighEntropyClientHints = false, disableRedirectReferer = false } = options;
+    let { body = null, json = null, data = null, files = null, headers = null, params = null, cookies = null, auth = null, fetchMode = null, allowRedirects = null, disableConditionalCache = false, disableClientHints = false, disableHighEntropyClientHints = false, disableRedirectReferer = false, initiator = null } = options;
 
     url = addParamsToUrl(url, params);
     let mergedHeaders = this._mergeHeaders(headers);
@@ -2108,6 +2111,9 @@ class Session {
     if (disableRedirectReferer) {
       reqOptions.disable_redirect_referer = true;
     }
+    if (initiator) {
+      reqOptions.initiator = initiator;
+    }
     if (disableConditionalCache) {
       reqOptions.disable_conditional_cache = true;
     }
@@ -2142,7 +2148,7 @@ class Session {
    */
   requestSync(method, url, options = {}) {
     refuseIfSessionUsesJsCache(this, "requestSync");
-    let { body = null, json = null, data = null, files = null, headers = null, params = null, cookies = null, auth = null, timeout = null, fetchMode = null, allowRedirects = null, disableConditionalCache = false, disableClientHints = false, disableHighEntropyClientHints = false, disableRedirectReferer = false, exactHeaders = null, headerOrder = null } = options;
+    let { body = null, json = null, data = null, files = null, headers = null, params = null, cookies = null, auth = null, timeout = null, fetchMode = null, allowRedirects = null, disableConditionalCache = false, disableClientHints = false, disableHighEntropyClientHints = false, disableRedirectReferer = false, initiator = null, exactHeaders = null, headerOrder = null } = options;
 
     const exact = normalizeExactHeaders(exactHeaders);
     const hOrder = Array.isArray(headerOrder) && headerOrder.length ? headerOrder.map(String) : null;
@@ -2188,6 +2194,7 @@ class Session {
     if (fetchMode) requestConfig.fetch_mode = fetchMode;
     if (allowRedirects !== null && allowRedirects !== undefined) requestConfig.follow_redirects = !!allowRedirects;
     if (disableRedirectReferer) requestConfig.disable_redirect_referer = true;
+    if (initiator) requestConfig.initiator = initiator;
     if (disableConditionalCache) requestConfig.disable_conditional_cache = true;
     if (disableClientHints) requestConfig.disable_client_hints = true;
     if (disableHighEntropyClientHints) requestConfig.disable_high_entropy_client_hints = true;
@@ -2224,7 +2231,7 @@ class Session {
     // The get_async entry has no exact_headers field, so a caller asking for one
     // goes down the generic request path instead of having it dropped in silence.
     if (options.exactHeaders) return this.request("GET", url, options);
-    const { headers = null, params = null, cookies = null, auth = null, fetchMode = null, timeout = null, allowRedirects = null, disableConditionalCache = false, disableClientHints = false, disableHighEntropyClientHints = false, disableRedirectReferer = false, signal = null } = options;
+    const { headers = null, params = null, cookies = null, auth = null, fetchMode = null, timeout = null, allowRedirects = null, disableConditionalCache = false, disableClientHints = false, disableHighEntropyClientHints = false, disableRedirectReferer = false, initiator = null, signal = null } = options;
 
     url = addParamsToUrl(url, params);
     let mergedHeaders = this._mergeHeaders(headers);
@@ -2252,6 +2259,9 @@ class Session {
     }
     if (disableRedirectReferer) {
       reqOptions.disable_redirect_referer = true;
+    }
+    if (initiator) {
+      reqOptions.initiator = initiator;
     }
     if (disableConditionalCache) {
       reqOptions.disable_conditional_cache = true;
@@ -2285,7 +2295,7 @@ class Session {
     // The post_async entry has no exact_headers field, so a caller asking for one
     // goes down the generic request path instead of having it dropped in silence.
     if (options.exactHeaders) return this.request("POST", url, options);
-    let { body = null, json = null, data = null, files = null, headers = null, params = null, cookies = null, auth = null, fetchMode = null, timeout = null, allowRedirects = null, disableConditionalCache = false, disableClientHints = false, disableHighEntropyClientHints = false, disableRedirectReferer = false, signal = null } = options;
+    let { body = null, json = null, data = null, files = null, headers = null, params = null, cookies = null, auth = null, fetchMode = null, timeout = null, allowRedirects = null, disableConditionalCache = false, disableClientHints = false, disableHighEntropyClientHints = false, disableRedirectReferer = false, initiator = null, signal = null } = options;
 
     url = addParamsToUrl(url, params);
     let mergedHeaders = this._mergeHeaders(headers);
@@ -2347,6 +2357,9 @@ class Session {
     if (disableRedirectReferer) {
       reqOptions.disable_redirect_referer = true;
     }
+    if (initiator) {
+      reqOptions.initiator = initiator;
+    }
     if (disableConditionalCache) {
       reqOptions.disable_conditional_cache = true;
     }
@@ -2380,7 +2393,7 @@ class Session {
    * @returns {Promise<Response>} Response object
    */
   request(method, url, options = {}) {
-    let { body = null, json = null, data = null, files = null, headers = null, params = null, cookies = null, auth = null, timeout = null, fetchMode = null, allowRedirects = null, disableConditionalCache = false, disableClientHints = false, disableHighEntropyClientHints = false, disableRedirectReferer = false, exactHeaders = null, headerOrder = null, signal = null } = options;
+    let { body = null, json = null, data = null, files = null, headers = null, params = null, cookies = null, auth = null, timeout = null, fetchMode = null, allowRedirects = null, disableConditionalCache = false, disableClientHints = false, disableHighEntropyClientHints = false, disableRedirectReferer = false, initiator = null, exactHeaders = null, headerOrder = null, signal = null } = options;
 
     const exact = normalizeExactHeaders(exactHeaders);
     const hOrder = Array.isArray(headerOrder) && headerOrder.length ? headerOrder.map(String) : null;
@@ -2439,6 +2452,7 @@ class Session {
     if (fetchMode) requestConfig.fetch_mode = fetchMode;
     if (allowRedirects !== null && allowRedirects !== undefined) requestConfig.follow_redirects = !!allowRedirects;
     if (disableRedirectReferer) requestConfig.disable_redirect_referer = true;
+    if (initiator) requestConfig.initiator = initiator;
     if (disableConditionalCache) requestConfig.disable_conditional_cache = true;
     if (disableClientHints) requestConfig.disable_client_hints = true;
     if (disableHighEntropyClientHints) requestConfig.disable_high_entropy_client_hints = true;
@@ -3046,7 +3060,7 @@ class Session {
    */
   getStream(url, options = {}) {
     refuseIfSessionUsesJsCache(this, "getStream");
-    const { params, headers, cookies, timeout, allowRedirects = null, disableConditionalCache = false, disableClientHints = false, disableHighEntropyClientHints = false, disableRedirectReferer = false } = options;
+    const { params, headers, cookies, timeout, allowRedirects = null, disableConditionalCache = false, disableClientHints = false, disableHighEntropyClientHints = false, disableRedirectReferer = false, initiator = null } = options;
 
     // Add params to URL
     if (params) {
@@ -3072,6 +3086,9 @@ class Session {
     }
     if (disableRedirectReferer) {
       reqOptions.disable_redirect_referer = true;
+    }
+    if (initiator) {
+      reqOptions.initiator = initiator;
     }
     if (disableConditionalCache) {
       reqOptions.disable_conditional_cache = true;
@@ -3122,7 +3139,7 @@ class Session {
    */
   postStream(url, options = {}) {
     refuseIfSessionUsesJsCache(this, "postStream");
-    const { body: bodyOpt, json: jsonBody, form, params, headers, cookies, timeout, allowRedirects = null, disableConditionalCache = false, disableClientHints = false, disableHighEntropyClientHints = false, disableRedirectReferer = false } = options;
+    const { body: bodyOpt, json: jsonBody, form, params, headers, cookies, timeout, allowRedirects = null, disableConditionalCache = false, disableClientHints = false, disableHighEntropyClientHints = false, disableRedirectReferer = false, initiator = null } = options;
 
     // Add params to URL
     if (params) {
@@ -3161,6 +3178,9 @@ class Session {
     }
     if (disableRedirectReferer) {
       reqOptions.disable_redirect_referer = true;
+    }
+    if (initiator) {
+      reqOptions.initiator = initiator;
     }
     if (disableConditionalCache) {
       reqOptions.disable_conditional_cache = true;
@@ -3210,7 +3230,7 @@ class Session {
    */
   requestStream(method, url, options = {}) {
     refuseIfSessionUsesJsCache(this, "requestStream");
-    const { body, params, headers, cookies, timeout, allowRedirects = null, disableConditionalCache = false, disableClientHints = false, disableHighEntropyClientHints = false, disableRedirectReferer = false, exactHeaders = null, headerOrder = null } = options;
+    const { body, params, headers, cookies, timeout, allowRedirects = null, disableConditionalCache = false, disableClientHints = false, disableHighEntropyClientHints = false, disableRedirectReferer = false, initiator = null, exactHeaders = null, headerOrder = null } = options;
 
     const exact = normalizeExactHeaders(exactHeaders);
     const hOrder = Array.isArray(headerOrder) && headerOrder.length ? headerOrder.map(String) : null;
@@ -3251,6 +3271,9 @@ class Session {
     }
     if (disableRedirectReferer) {
       requestConfig.disable_redirect_referer = true;
+    }
+    if (initiator) {
+      requestConfig.initiator = initiator;
     }
     if (disableConditionalCache) {
       requestConfig.disable_conditional_cache = true;

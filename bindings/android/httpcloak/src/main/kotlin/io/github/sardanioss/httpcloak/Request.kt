@@ -45,6 +45,14 @@ public data class Request @JvmOverloads constructor(
      * listed keep the preset's position.
      */
     public val headerOrder: List<String>? = null,
+    /**
+     * The page API this request stands for: "fetch" for fetch(), "xhr" for an
+     * XMLHttpRequest. Either makes it a CORS call unless [headers] set
+     * Sec-Fetch-Mode or Sec-Fetch-Dest. Browsers send the two differently, and
+     * a Firefox preset sends an XMLHttpRequest with no priority header. Null
+     * decides from the request's shape and sends any CORS call as a fetch().
+     */
+    public val initiator: String? = null,
 )
 
 /** A request body and the Content-Type it implies. */
@@ -214,5 +222,6 @@ internal fun Request.toJson(
     if (disableClientHints) json.put("disable_client_hints", true)
     if (disableHighEntropyClientHints) json.put("disable_high_entropy_client_hints", true)
     if (disableRedirectReferer) json.put("disable_redirect_referer", true)
+    initiator?.let { json.put("initiator", it) }
     return json.toString()
 }

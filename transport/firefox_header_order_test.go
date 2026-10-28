@@ -33,6 +33,10 @@ import (
 // map, so they go there sorted. The captured navigation and form submission
 // were started by script and sent no Sec-Fetch-User; the preset sends one, in
 // the place the typed navigation put it.
+//
+// An XMLHttpRequest, which only Initiator can say a request is, carries no
+// priority header, and on its first hop its Referer comes after Connection,
+// like a navigation's, with the headers the page set before Connection.
 func TestFirefoxHeaderOrder(t *testing.T) {
 	const ref = "https://example.test/page"
 	cookie := map[string][]string{"Cookie": {"sid=abc123; pref=dark"}}
@@ -91,6 +95,23 @@ func TestFirefoxHeaderOrder(t *testing.T) {
 			"Host", "User-Agent", "Accept", "Accept-Language", "Accept-Encoding", "Referer", "Connection", "Cookie",
 			"Upgrade-Insecure-Requests", "Sec-Fetch-Dest", "Sec-Fetch-Mode", "Sec-Fetch-Site", "Sec-Fetch-User",
 			"Priority"}},
+		{"fetch named by Initiator", Request{Method: "GET", Initiator: InitiatorFetch, Headers: with(cookie, "Referer", ref)}, []string{
+			"Host", "User-Agent", "Accept", "Accept-Language", "Accept-Encoding", "Referer", "Connection", "Cookie",
+			"Sec-Fetch-Dest", "Sec-Fetch-Mode", "Sec-Fetch-Site", "Priority"}},
+		{"XMLHttpRequest with a header of its own", Request{Method: "GET", Initiator: InitiatorXHR,
+			Headers: with(cookie, "Referer", ref, "X-Lower-Custom", "v")}, []string{
+			"Host", "User-Agent", "Accept", "Accept-Language", "Accept-Encoding", "X-Lower-Custom", "Connection",
+			"Referer", "Cookie", "Sec-Fetch-Dest", "Sec-Fetch-Mode", "Sec-Fetch-Site"}},
+		{"XMLHttpRequest JSON POST", Request{Method: "POST", Initiator: InitiatorXHR, Body: []byte(`{"a":1}`),
+			Headers: with(cookie, "Referer", ref, "Content-Type", "application/json", "X-Custom", "1",
+				"Origin", "https://example.test")}, []string{
+			"Host", "User-Agent", "Accept", "Accept-Language", "Accept-Encoding", "Content-Type", "X-Custom",
+			"Content-Length", "Origin", "Connection", "Referer", "Cookie", "Sec-Fetch-Dest", "Sec-Fetch-Mode",
+			"Sec-Fetch-Site"}},
+		{"XMLHttpRequest redirect hop", Request{Method: "GET", Initiator: InitiatorXHR, RedirectHop: true,
+			Headers: with(cookie, "Referer", ref)}, []string{
+			"Host", "User-Agent", "Accept", "Accept-Language", "Accept-Encoding", "Referer", "Connection", "Cookie",
+			"Sec-Fetch-Dest", "Sec-Fetch-Mode", "Sec-Fetch-Site"}},
 	}
 
 	h1URL, h1Heads := serveH1HeaderNames(t)
@@ -148,6 +169,22 @@ func TestFirefoxHeaderOrder(t *testing.T) {
 					t.Errorf("HTTP/2:\n got  %q\n want %q", got, h2want)
 				}
 			})
+		}
+	}
+}
+
+// An Initiator the transport does not know fails the request before anything is
+// dialled, rather than sending it as a fetch() without a word.
+func TestInitiatorRejectsUnknownValue(t *testing.T) {
+	tr := NewTransport("firefox-148-windows")
+	defer tr.Close()
+	for _, v := range []string{"XHR", "xmlhttprequest", "Fetch"} {
+		_, err := tr.Do(context.Background(), &Request{Method: "GET", URL: "http://127.0.0.1:1/", Initiator: v})
+		if err == nil || !strings.Contains(err.Error(), "unknown initiator") {
+			t.Errorf("Initiator %q: err = %v, want an unknown initiator error", v, err)
+		}
+		if _, err := tr.DoStream(context.Background(), &Request{Method: "GET", URL: "http://127.0.0.1:1/", Initiator: v}); err == nil || !strings.Contains(err.Error(), "unknown initiator") {
+			t.Errorf("DoStream, Initiator %q: err = %v, want an unknown initiator error", v, err)
 		}
 	}
 }

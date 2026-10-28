@@ -361,7 +361,8 @@ body "{\"k\":1}"
         }
       },
       "priority_model": "table",
-      "priority_over_http1": true
+      "priority_over_http1": true,
+      "xhr_priority_header": ""
     },
     "headers": {
       "user_agent": "Mozilla/5.0 (X11; Linux x86_64; rv:148.0) Gecko/20100101 Firefox/148.0",
