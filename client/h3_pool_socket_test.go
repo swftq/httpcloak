@@ -107,14 +107,17 @@ func TestHTTP3PoolClosesSocketWithConnection(t *testing.T) {
 				return
 			}
 			// Ended by the client's CONNECTION_CLOSE, not left to run out the
-			// server's idle timeout.
+			// server's idle timeout. Whether that close is a transport or an
+			// application one follows the preset; see transport.CloseQUICConn.
 			select {
 			case <-serverConn.Context().Done():
 			case <-time.After(2 * time.Second):
 				t.Fatal("the server's connection was still open 2s after the client closed it")
 			}
 			var appErr *quic.ApplicationError
-			if cause := context.Cause(serverConn.Context()); !errors.As(cause, &appErr) || !appErr.Remote {
+			var trErr *quic.TransportError
+			cause := context.Cause(serverConn.Context())
+			if !(errors.As(cause, &appErr) && appErr.Remote) && !(errors.As(cause, &trErr) && trErr.Remote) {
 				t.Fatalf("the server's connection ended with %v, want the client's CONNECTION_CLOSE", cause)
 			}
 		})
