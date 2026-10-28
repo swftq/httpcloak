@@ -10,7 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **`hpack_header_order_early_referer`**: a second header order for the requests whose `Referer` a browser settles before it picks a connection, which are a `fetch()` (`sec-fetch-dest: empty`) and every redirect hop. Firefox needs it, since it writes `Referer` right after `Accept-Encoding` on those and after `Connection` on everything else. In Go it is `H2FingerprintConfig.HPACKHeaderOrderEarlyReferer`, and `Preset.HeaderOrderFor` picks between the orders.
+
 - **`"*"` in a header order** (`fingerprint.OtherHeaders`): the headers the order does not name, usually the caller's, go where it stands instead of after everything else. The marker never reaches the wire.
+
 - **`Request.RedirectHop`**: marks a request built to follow a 3xx. The session sets it on every hop it follows.
 
 ### Fixed
@@ -20,11 +22,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - A `fetch()`-shaped request and a redirect hop carry `Referer` right after `Accept-Encoding` instead, as Firefox does.
   - Not yet modelled: a page that sends a `Referrer-Policy` makes Firefox put `Referer` early on every request, and an `XMLHttpRequest` sends no `Priority`.
   - `client.Client` uses the same order for every request shape and still sends a preset's `TE` on HTTP/1.1.
+
 - **A preset's `TE` goes out on HTTP/2 only**: the Firefox presets sent `Te: trailers` on HTTP/1.1, where Firefox sends no `TE` at all; it adds `te: trailers` only in its HTTP/2 encoder. A `TE` the caller sets still goes out.
 
 - **`Connection` goes where each browser puts it on HTTP/1.1**: the writer sent it second, right after `Host`, for every preset. That is Chrome's place, but Firefox 159 sends it after `Accept-Encoding`, on the page and on every stylesheet, script, image and frame it loads, so a Firefox preset carried Chrome's layout on HTTP/1.1. Firefox presets now put it there, or later when the request carries a header that comes before it in Firefox's order, such as `Origin`. A preset or JSON profile places it by naming `connection` in its header order; one that does not keeps Chrome's place, so Chrome presets are byte-for-byte unchanged, and a `Connection` the caller sets keeps the preset's place. HTTP/2 and HTTP/3 carry no `Connection` and are unaffected.
 
 - **Exact headers send `Connection` as listed**: a `Connection` pair went out second whatever its place in the list, and one spelled in lowercase was not sent at all. It now goes out where the caller listed it and as they spelled it, like every other pair, and a lowercase `connection: close` also closes the pooled connection after the response.
+
+- **Firefox opens its HTTP/2 streams the way Firefox does**: the Firefox presets started a connection at stream 1, like every other client, and opened each stream at the 131072-byte window they advertise. Firefox starts at stream 3, keeping 1 for an HTTP/1.1 Upgrade. It follows every HEADERS with a `WINDOW_UPDATE` of 12451840 on that stream, which takes the stream to 12 MiB, and sends it in the same write and before any request body. A Firefox 159 capture did both on all 106 requests over 9 connections, and the Firefox 133 and 148 sources carry the same code and values. The Firefox presets now do both, and the client counts that credit, so a large response arrives without a window refresh every 64 KB. JSON presets gain `first_stream_id` and `stream_window_update` for it, and `describe` writes them only where they are set. Chrome and Safari start at 1 and send no such update, so their presets are byte-for-byte unchanged. Needs `sardanioss/net` v1.2.14, which adds `Transport.FirstStreamID` and `Transport.StreamWindowUpdate`.
 
 ## [1.7.4] - 2026-11-15
 

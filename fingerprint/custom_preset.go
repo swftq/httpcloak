@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/sardanioss/net/http2/hpack"
+	"math"
 	"os"
 	"strings"
 
@@ -152,6 +153,14 @@ type HTTP2Spec struct {
 	StreamWeight           *uint16 `json:"stream_weight,omitempty"`
 	StreamExclusive        *bool   `json:"stream_exclusive,omitempty"`
 	NoRFC7540Priorities    *bool   `json:"no_rfc7540_priorities,omitempty"`
+
+	// StreamWindowUpdate is the WINDOW_UPDATE increment sent on every new
+	// stream straight after its HEADERS. Omitted or 0 sends none. Firefox
+	// sends 12451840.
+	StreamWindowUpdate *uint32 `json:"stream_window_update,omitempty"`
+	// FirstStreamID is the ID of a connection's first stream, which must be
+	// odd and below 2^31-1. Omitted or 0 means 1. Firefox starts at 3.
+	FirstStreamID *uint32 `json:"first_stream_id,omitempty"`
 
 	// H2 fingerprinting config
 	Settings      []HTTP2SettingSpec `json:"settings,omitempty"`
@@ -1161,7 +1170,8 @@ func applyHTTP2(p *Preset, spec *HTTP2Spec) error {
 		spec.DisableCookieSplit != nil || spec.PriorityTable != nil ||
 		spec.DataFrameMaxSize != nil || spec.PrefacePingIdleMs != nil ||
 		spec.PrefacePingHangMs != nil || spec.IdlePingMs != nil ||
-		spec.PriorityModel != nil || spec.PriorityOverHTTP1 != nil {
+		spec.PriorityModel != nil || spec.PriorityOverHTTP1 != nil ||
+		spec.FirstStreamID != nil || spec.StreamWindowUpdate != nil {
 		if p.H2Config == nil {
 			p.H2Config = &H2FingerprintConfig{}
 		}
@@ -1210,6 +1220,12 @@ func applyHTTP2(p *Preset, spec *HTTP2Spec) error {
 		if spec.DataFrameMaxSize != nil {
 			v := *spec.DataFrameMaxSize
 			p.H2Config.DataFrameMaxSize = &v
+		}
+		if spec.FirstStreamID != nil {
+			p.H2Config.FirstStreamID = *spec.FirstStreamID
+		}
+		if spec.StreamWindowUpdate != nil {
+			p.H2Config.StreamWindowUpdate = *spec.StreamWindowUpdate
 		}
 		if spec.PrefacePingIdleMs != nil {
 			v := *spec.PrefacePingIdleMs
@@ -1624,6 +1640,18 @@ func validatePreset(p *Preset, spec *PresetSpec) error {
 			if rp.Weight > 256 {
 				return fmt.Errorf("priority_table[%q].weight %d is out of range (1-256)", dest, rp.Weight)
 			}
+		}
+
+		// On the built preset, since based_on can supply either side. The
+		// transport refuses both too, but only once a connection is open.
+		// The last odd ID, 2^31-1, is refused as well: it leaves no room for
+		// a second stream, so the transport will not start a connection on it.
+		if id := p.H2FirstStreamID(); id%2 == 0 || id >= math.MaxInt32 {
+			return fmt.Errorf("first_stream_id %d is not an odd 31-bit stream ID below 2^31-1", id)
+		}
+		if w := uint64(p.HTTP2Settings.InitialWindowSize) + uint64(p.H2StreamWindowUpdate()); w > math.MaxInt32 {
+			return fmt.Errorf("initial_window_size %d plus stream_window_update %d is %d, past the 2^31-1 a window may reach",
+				p.HTTP2Settings.InitialWindowSize, p.H2StreamWindowUpdate(), w)
 		}
 	}
 
