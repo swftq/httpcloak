@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **HTTP/3 connections close the way the preset's browser closes them**: every deliberate close sent the server an application `CONNECTION_CLOSE` with code 0 and no reason, and 0 is not an HTTP/3 error code. That covered `Session.Close`, `CloseGraceful`, `Refresh`, a proxy or preset switch, the 0-RTT retry, a dial that finished after `Close`, and every close in `client.Client`'s HTTP/3 pool, whose `"closing"` reason was never reached. A Chrome preset now sends what Chrome 156 sent on exit and when a browser context closed, captured on the wire: one packet holding an ACK and a transport `CONNECTION_CLOSE` with `NO_ERROR`, frame type 0 and the reason `70:net error`. That is `QUIC_CONNECTION_CANCELLED`, which Chromium's pool closes every session with when it goes away. Firefox and Safari presets send `H3_NO_ERROR` with no reason after an ACK, as Firefox 159 did on quit; Safari has not been captured. An idle connection still times out without a word, as it does in both browsers. The quic-go fork gains `Conn.CloseWithTransportError`, an ACK in every close packet, and `http3.Transport.CloseConn` for this.
+
 ## [1.7.3] - 2026-10-14
 
 ### Added

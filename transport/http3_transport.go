@@ -1303,7 +1303,7 @@ func (t *HTTP3Transport) dialDirect(ctx context.Context, addr *net.UDPAddr, tlsC
 	t.liveMu.Lock()
 	if t.h3Closed {
 		t.liveMu.Unlock()
-		conn.CloseWithError(0, "")
+		CloseQUICConn(t.preset, conn)
 		sock.close()
 		return nil, net.ErrClosed
 	}
@@ -1353,7 +1353,7 @@ func (t *HTTP3Transport) closeOrigin(addr string) {
 	delete(t.byOrigin, addr)
 	t.liveMu.Unlock()
 	for conn := range conns {
-		conn.CloseWithError(0, "")
+		CloseQUICConn(t.preset, conn)
 	}
 }
 
@@ -1379,7 +1379,7 @@ func (t *HTTP3Transport) closeDirectConns(final bool) {
 	t.sockets = nil
 	t.liveMu.Unlock()
 	for conn, sock := range sockets {
-		conn.CloseWithError(0, "")
+		CloseQUICConn(t.preset, conn)
 		sock.close()
 	}
 }
@@ -1439,6 +1439,7 @@ func (t *HTTP3Transport) recordHandshakeState(
 
 // buildHTTP3Transport builds the http3.Transport from preset getters.
 func (t *HTTP3Transport) buildHTTP3Transport(dialFunc func(ctx context.Context, addr string, tlsCfg *tls.Config, cfg *quic.Config) (*quic.Conn, error), additionalSettings map[uint64]uint64) *http3.Transport {
+	preset := t.preset
 	return &http3.Transport{
 		TLSClientConfig:        t.tlsConfig,
 		QUICConfig:             t.quicConfig,
@@ -1450,6 +1451,10 @@ func (t *HTTP3Transport) buildHTTP3Transport(dialFunc func(ctx context.Context, 
 		// Never add "accept-encoding: gzip" on the caller's behalf; see the
 		// same setting in internal/h2build.
 		DisableCompression: true,
+		// Close and Refresh end the pooled connections here. The preset is the
+		// one this transport was built with, so after a profile switch the old
+		// connections still close as the old browser would.
+		CloseConn: func(conn *quic.Conn) error { return CloseQUICConn(preset, conn) },
 	}
 }
 

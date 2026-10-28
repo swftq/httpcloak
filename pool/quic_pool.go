@@ -53,6 +53,9 @@ type QUICConn struct {
 	inFlight       int32
 	closeRequested bool
 	lastProgress   atomic.Int64
+
+	// preset picks how Close ends QUICConn; see transport.CloseQUICConn.
+	preset *fingerprint.Preset
 }
 
 // release marks one request as finished with the connection. If a close was
@@ -223,7 +226,7 @@ func (c *QUICConn) Close() error {
 		}
 	}
 	if c.QUICConn != nil {
-		if err := c.QUICConn.CloseWithError(quic.ApplicationErrorCode(0), "closing"); err != nil {
+		if err := transport.CloseQUICConn(c.preset, c.QUICConn); err != nil {
 			errs = append(errs, err)
 		}
 	}
@@ -616,6 +619,9 @@ func (p *QUICHostPool) createConn(ctx context.Context) (*QUICConn, error) {
 		AdditionalSettings:     additionalSettings,
 		MaxResponseHeaderBytes: int(p.preset.H3MaxResponseHeaderBytes()),
 		SendGreaseFrames:       p.preset.H3SendGreaseFrames(),
+		// QUICConn.Close ends the connection here, the way the preset's
+		// browser does; see transport.CloseQUICConn.
+		CloseConn: func(conn *quic.Conn) error { return transport.CloseQUICConn(p.preset, conn) },
 		// Never add "accept-encoding: gzip" on the caller's behalf; see the
 		// same setting in internal/h2build.
 		DisableCompression: true,
@@ -679,6 +685,7 @@ func (p *QUICHostPool) createConn(ctx context.Context) (*QUICConn, error) {
 		CreatedAt:  time.Now(),
 		LastUsedAt: time.Now(),
 		UseCount:   0,
+		preset:     p.preset,
 	}
 
 	return conn, nil

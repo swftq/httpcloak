@@ -160,3 +160,5 @@ For a totally fresh session with no cookies, no tickets and no inherited state, 
 One detail to know: after `Refresh()` the session adds `cache-control: max-age=0` to the next request, which matches what a real browser F5 sends. Some servers treat that as a deliberate cache-bust. If that signal is unwanted, build a fresh session instead.
 
 `Refresh()` and `Close()` both go through a timeout-bounded close path on QUIC, so a misbehaving H3 peer can't hang the call forever.
+
+Each QUIC connection closes the way the preset's browser closes one it's done with. A Chrome preset sends what Chrome sends on exit: an ACK and a transport `CONNECTION_CLOSE` with `NO_ERROR` and the reason `70:net error`, in one packet. Firefox and Safari presets send `H3_NO_ERROR` with no reason, as Firefox does.
