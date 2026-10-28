@@ -19,6 +19,7 @@ import (
 
 	"github.com/sardanioss/httpcloak/dns"
 	"github.com/sardanioss/httpcloak/fingerprint"
+	"github.com/sardanioss/httpcloak/internal/happyeyeballs"
 	"github.com/sardanioss/httpcloak/proxy"
 	utls "github.com/sardanioss/utls"
 )
@@ -681,7 +682,7 @@ func (t *HTTP1Transport) createConn(ctx context.Context, host, port, scheme stri
 		// an unreachable address (e.g. a blackholed IPv6) no longer delays the
 		// next, and the fastest reachable one wins. Bounded by the dialer timeout
 		// + ctx; losing connections are closed.
-		rawConn, err = staggeredRace(ctx, len(ips), 250*time.Millisecond,
+		rawConn, err = happyeyeballs.Race(ctx, len(ips), 250*time.Millisecond,
 			func(rctx context.Context, idx int) (net.Conn, error) {
 				network := "tcp4"
 				if ips[idx].To4() == nil {

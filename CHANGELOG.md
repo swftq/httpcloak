@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **The `client` package's HTTP/3 dial no longer waits out a dead IPv6 address before trying IPv4**: `client.Client`'s HTTP/3 pool tried a host's addresses one after another, IPv6 first. A QUIC attempt to an address that never answers does not fail, because UDP reports nothing, so on a dual-stack host whose IPv6 address was unreachable every new connection sat out the 5 second QUIC handshake timeout before it tried IPv4. Measured locally with `WithForceHTTP3()` against a server on 127.0.0.1 requested as `localhost`, which resolves to `::1` and `127.0.0.1`: the first request took 5.3 s. The pool now races the addresses the way a `Session` already did. The families are interleaved with the preferred one first (IPv4 under `WithPreferIPv4()`), the next address starts 250 ms later or as soon as an attempt fails, and the first handshake wins. The same request takes 0.26 s, and both now run one implementation (`internal/happyeyeballs`). Each attempt builds its own ClientHello, because attempts sharing one corrupt each other's; the dial was made sequential in the change that began sharing one. A losing attempt is dropped without a `CONNECTION_CLOSE`, the way Chromium drops a QUIC attempt it no longer needs, and its UDP socket is closed at once rather than whenever the garbage collector next ran. When the preferred address completes its handshake within 250 ms, the wire is unchanged: a server still sees one attempt. Chrome makes a single QUIC attempt, to one address, and reaches the other family over TCP, which a forced HTTP/3 request cannot do.
+
 ## [1.7.3] - 2026-10-14
 
 ### Added
