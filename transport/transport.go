@@ -2898,6 +2898,10 @@ func mergeCallerHeaders(httpReq *http.Request, req *Request) {
 		if len(values) == 0 {
 			continue
 		}
+		if omitsPriority(key, values) {
+			delete(httpReq.Header, "Priority")
+			continue
+		}
 		start := len(backing)
 		backing = append(backing, values...)
 		httpReq.Header[canonicalHeaderName(key)] = backing[start:len(backing):len(backing)]
@@ -3115,6 +3119,26 @@ func applyPresetHeaders(httpReq *http.Request, wire *presetWireHeaders, customHe
 	} else {
 		httpReq.Header[http.PHeaderOrderKey] = []string{":method", ":authority", ":scheme", ":path"}
 	}
+}
+
+// omitsPriority reports whether a caller's values for a header ask for a
+// request with no priority header. The header is an RFC 8941 Dictionary, and a
+// Dictionary with no members is serialized by leaving the field out. That is
+// what Chrome does at the default urgency: quiche's SerializePriorityFieldValue
+// drops u=3 and a false i, and spdy_http_utils.cc adds the header only when
+// something is left. So "" asks for that request, which Chrome sends for an
+// async or injected script, rather than for an empty field no browser sends.
+// h2build gives a request without the header the default urgency's weight.
+func omitsPriority(key string, values []string) bool {
+	if !strings.EqualFold(key, "priority") {
+		return false
+	}
+	for _, v := range values {
+		if strings.TrimSpace(v) != "" {
+			return false
+		}
+	}
+	return true
 }
 
 // sniffXHRMode decides whether a request should send CORS-mode Sec-Fetch-*
