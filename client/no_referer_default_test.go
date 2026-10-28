@@ -220,7 +220,10 @@ func TestClientCallerOriginNamesThePage(t *testing.T) {
 
 // TestClientWireRefererNamesThePage gives the Referer in Headers only, the
 // one way httpcloak.Client callers can give it. It names the page, over a
-// caller's Origin too, so the no-page default does not apply.
+// caller's Origin too, so the no-page default does not apply. Which Origin a
+// request to a page the Referer names carries is not this change's: only that
+// one goes out where a browser always sends one, and that a same-origin
+// request's names its own origin.
 func TestClientWireRefererNamesThePage(t *testing.T) {
 	s := newNoPageServer(t)
 	page := func() string { return s.target + "/page" }
@@ -229,20 +232,21 @@ func TestClientWireRefererNamesThePage(t *testing.T) {
 		mode    FetchMode
 		headers func() map[string][]string
 		site    string
-		origin  bool // whether Origin goes out
+		origin  string // "" for none, "*" for one with any value, else the one it must be
+		ownOK   bool   // the request may also send its own origin, or none
 	}{
 		{"cors GET from its own origin", FetchModeCORS, func() map[string][]string {
 			return map[string][]string{"Referer": {page()}}
-		}, "same-origin", false},
+		}, "same-origin", "", true},
 		{"cors GET from another site", FetchModeCORS, func() map[string][]string {
 			return map[string][]string{"Referer": {"https://www.elsewhere.test/page"}}
-		}, "cross-site", true},
+		}, "cross-site", "*", false},
 		{"cors GET with a Referer and another Origin", FetchModeCORS, func() map[string][]string {
 			return map[string][]string{"Referer": {page()}, "Origin": {"https://www.elsewhere.test"}}
-		}, "same-origin", true},
+		}, "same-origin", "https://www.elsewhere.test", false},
 		{"navigation from the same site", FetchModeNavigate, func() map[string][]string {
 			return map[string][]string{"referer": {"https://www.example.test/page"}}
-		}, "same-site", false},
+		}, "same-site", "", false},
 	}
 	forEachNoPageClient(t, func(t *testing.T, c *Client, proto string) {
 		for _, tc := range cases {
@@ -252,8 +256,16 @@ func TestClientWireRefererNamesThePage(t *testing.T) {
 				if got.site != tc.site {
 					t.Errorf("Sec-Fetch-Site = %q, want %q", got.site, tc.site)
 				}
-				if got.hasOrigin != tc.origin {
-					t.Errorf("Origin sent = %v (%q), want %v", got.hasOrigin, got.origin, tc.origin)
+				switch {
+				case tc.ownOK && got.hasOrigin && got.origin != s.target:
+					t.Errorf("Origin = %q, want none or the page's own %q", got.origin, s.target)
+				case tc.ownOK:
+				case tc.origin == "" && got.hasOrigin:
+					t.Errorf("Origin = %q, want none", got.origin)
+				case tc.origin == "*" && !got.hasOrigin:
+					t.Errorf("no Origin on a %s CORS request", tc.site)
+				case tc.origin != "" && tc.origin != "*" && got.origin != tc.origin:
+					t.Errorf("Origin = %q, want %q", got.origin, tc.origin)
 				}
 			})
 		}
