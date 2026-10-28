@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **A frame's navigation gets the frame's priority**: the priority table read `Sec-Fetch-Dest` before a caller's headers were merged, and a navigation still carries the preset's `document` at that point, so a navigation the caller marked as an iframe's took the page's priority. On a Firefox preset it went out at `u=0, i` beside the iframe's weight, 22; Firefox 159 sends an iframe's document at `u=4`. The session transport and `client.Client` now look the priority up by the caller's `Sec-Fetch-Dest`. Chrome sends an iframe's document at `u=0, i` like the page's, so Chrome presets are unchanged.
+
 ## [1.7.3] - 2026-10-14
 
 ### Added
