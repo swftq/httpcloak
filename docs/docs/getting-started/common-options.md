@@ -163,11 +163,12 @@ whether you set it or the library inferred it from the request's shape:
   hop from https to http.
 
 The value is the `Origin` you set on the first request, or else the first URL's
-origin, since a browser sends a same-origin `fetch()` GET without one. Chrome
-presets send `null` as soon as a form or no-cors POST is redirected to another
-origin with a 307 or 308, as Chrome does. The other presets keep the page's
-origin there, as Firefox does. A request sent with no `Sec-Fetch-Mode` at all,
-such as a TLS-only one, carries your `Origin` unchanged on every hop.
+origin, since a browser sends a same-origin `fetch()` GET without one. Desktop
+and Android Chrome presets send `null` as soon as a form or no-cors POST is
+redirected to another origin with a 307 or 308, as Chrome does. The Firefox,
+Safari and iOS Chrome presets keep the page's origin there, as Firefox does. A
+request sent with no `Sec-Fetch-Mode` at all, such as a TLS-only one, carries
+your `Origin` unchanged on every hop.
 
 ## Retries
 
