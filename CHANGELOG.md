@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **A `Session`'s HTTP/3 dial no longer tells a server it "lost happy-eyeballs race"**: a `Session` races a host's addresses for HTTP/3, and an attempt that finished its handshake after another had won was closed with an application `CONNECTION_CLOSE` carrying the reason phrase `lost happy-eyeballs race`, a string no browser sends. It only goes out when both handshakes finish within moments of each other. Measured locally with HTTP/3 servers on `::1` and `127.0.0.1` requested as `localhost`, both handshakes held and then released together, the losing server received it in 9 of 30 requests. Such an attempt is now dropped without a frame, the way Chromium drops a QUIC session it no longer needs (`SILENT_CLOSE`), and the way an attempt still in its handshake when the race ended was already dropped. Its UDP socket is closed with it. As when Chrome drops one, the server keeps its side of the connection until its idle timeout. Chrome itself makes one QUIC attempt, to one address, so it never has a loser to close.
+
 ## [1.7.3] - 2026-10-14
 
 ### Added
