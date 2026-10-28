@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **`client.Client` takes the target's origin for the page when a CORS request names none**: a CORS request with no `Referer` and no `Origin` from the caller went out `Sec-Fetch-Site: cross-site`, with the target's own origin as its `Origin`. No browser sends that pair, because an `Origin` equal to the target's makes a request same-origin. Go 1.25+'s `http.CrossOriginProtection` answered every such POST with 403, a JSON POST sniffed as CORS included. Chrome 156 and Firefox 159 were captured sending `fetch()` and XHR requests from a page with `Referrer-Policy: no-referrer`, and with `fetch()`'s `referrerPolicy` option. They sent the default policy's `Sec-Fetch-Site` and `Origin`, only without the `Referer`. Such a request now goes out the way theirs did to their own origin: `same-origin`, with no `Origin` on a GET or HEAD and the target's origin on any other method.
+
+  With no `Referer`, an `Origin` the caller sets now names the page in every mode, so `Sec-Fetch-Site` follows it, and `null` gives `cross-site`. A `Referer` given only in `Headers` now sets `Sec-Fetch-Site` as well, because it is the one that goes on the wire. Some cases are unchanged: a no-cors request that names no page still goes out `cross-site`, a navigation `none`, and a CORS request whose site the caller forces keeps the target's origin. `Session` and the bindings are unchanged.
+
 ## [1.7.3] - 2026-10-14
 
 ### Added
