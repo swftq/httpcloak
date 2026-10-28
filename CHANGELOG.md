@@ -16,6 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   The priority table on a preset that announces `SETTINGS_NO_RFC7540_PRIORITIES` now drives the priority header only, never priority fields on HEADERS. A new preset field, `priority_always_urgency`, writes the urgency even at its default, `u=3, i`, as Safari does; Chrome writes `i`. The Python, Node and .NET preset constants gain `safari-26` and `safari-26-ios`.
 
+### Fixed
+
+- **Chrome on iOS from 148 on sends WebKit 26's priorities**: these presets sent weight 255 in every HTTP/2 HEADERS frame, `priority: u=0, i` on every request whatever it was for, and no priority header over HTTP/1.1. Chrome on iOS runs on WebKit, and its HTTP/2 layer already matched Safari 26's capture, down to the same Akamai hash. They now behave as Safari 26 did: no priority fields on HEADERS, a priority header that follows the request (`u=1, i` for a script, `u=5, i` for an image, `u=3, i` for a `fetch()`) on every protocol including HTTP/1.1, and `referer` right after `accept`. This was measured in Safari, not in Chrome on iOS itself; the presets before 148 stay as they were.
+
 ## [1.7.3] - 2026-10-14
 
 ### Added

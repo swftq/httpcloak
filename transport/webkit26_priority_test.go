@@ -7,12 +7,16 @@ import (
 	"time"
 )
 
+// webKit26Presets are the presets on WebKit 26's network stack.
+var webKit26Presets = []string{"safari-26", "safari-26-ios", "chrome-148-ios", "chrome-155-ios"}
+
 // Safari 26 sent a priority header on every request, its urgency following the
 // destination, and no priority fields on any HTTP/2 HEADERS frame: it announces
 // SETTINGS_NO_RFC7540_PRIORITIES and means it. Measured on macOS 26.3 and in
 // the iOS 26.3.1 simulator. The table drives the header and nothing else.
+// Chrome on iOS runs on the same WebKit, so its presets from 148 on do the same.
 func TestWebKit26PriorityHeaderWithoutFramePriority(t *testing.T) {
-	for _, preset := range []string{"safari-26", "safari-26-ios"} {
+	for _, preset := range webKit26Presets {
 		for _, c := range []struct {
 			mode, dest, want string
 		}{
@@ -63,7 +67,7 @@ func TestWebKit26PriorityHeaderWithoutFramePriority(t *testing.T) {
 // and over TLS, on macOS and iOS alike.
 func TestWebKit26PriorityOverHTTP1(t *testing.T) {
 	srv := newH1OrderCapture(t)
-	for _, preset := range []string{"safari-26", "safari-26-ios"} {
+	for _, preset := range webKit26Presets {
 		tr := NewTransport(preset)
 		names := srv.do(t, tr, &Request{Method: "GET", URL: srv.url,
 			Headers: map[string][]string{"Sec-Fetch-Mode": {"no-cors"}, "Sec-Fetch-Dest": {"image"}}})

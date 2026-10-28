@@ -359,16 +359,19 @@ func TestPriorityTable_WireEmission_LegacyChromeInheritsDefault(t *testing.T) {
 // iOS Chrome, iOS Safari — all carry NoRFC7540Priorities=true) keep the
 // legacy single-weight code path. The default table never applies to
 // them, because they don't emit per-resource RFC 7540 priorities at all.
+// The WebKit 26 presets bring a table of their own for the priority header
+// and send no priority fields at all; see
+// TestWebKit26PriorityHeaderWithoutFramePriority.
 func TestPriorityTable_WireEmission_NoRFC7540PresetSingleWeight(t *testing.T) {
-	preset := fingerprint.Get("chrome-148-ios")
+	preset := fingerprint.Get("chrome-147-ios")
 	if preset == nil {
-		t.Skip("chrome-148-ios preset unavailable")
+		t.Skip("chrome-147-ios preset unavailable")
 	}
 	if !preset.HTTP2Settings.NoRFC7540Priorities {
-		t.Fatalf("chrome-148-ios: NoRFC7540Priorities=false, expected true")
+		t.Fatalf("chrome-147-ios: NoRFC7540Priorities=false, expected true")
 	}
 	if preset.H2HasPriorityTable() {
-		t.Fatalf("chrome-148-ios: H2HasPriorityTable=true, want false (NoRFC7540 must opt out)")
+		t.Fatalf("chrome-147-ios: H2HasPriorityTable=true, want false (NoRFC7540 must opt out)")
 	}
 
 	staticWeight := uint8(preset.HTTP2Settings.StreamWeight)
