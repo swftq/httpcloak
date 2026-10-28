@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **A redirect hop sends the `Sec-Fetch-Site` a browser would**: the session copied the `Sec-Fetch-Site` you set onto every hop. So a `fetch()` sent as `same-origin` and redirected to another site still said `same-origin` there, and again on the hop back. Chrome 156 and Firefox 159 were captured on 100 requests moving between `a.test`, `sub.a.test`, `b.test`, a second port on `a.test` and plain-HTTP `a.test`, and they sent the same value on every hop. Each hop sends the most cross-site relation between the page that started the request and any URL in the chain so far, so the value only moves towards `cross-site`:
+  - `same-origin` becomes `same-site` on another host or port of the same site, and `cross-site` on another site or scheme.
+  - `same-site` becomes `cross-site` off its site.
+  - A chain that comes back keeps what it reached.
+  - A typed navigation's `none` stays `none` on every hop, even through another site.
+
+  WebKit's source works it out the same way. A site is the scheme plus the registrable domain from the public suffix list, so one host over http and https is two sites, and two ports on one host are one.
+
+  Only a value you set can move. A preset's own value is `none` for a navigation and `cross-site` for a request sniffed as `fetch()`, and a hop changes neither. With `ExactHeaders`, a `Sec-Fetch-Site` pair takes the hop's value in its own slot and spelling, because the transport never reads the hop's headers in that mode. A list without the pair gains none.
+
 ## [1.7.3] - 2026-10-14
 
 ### Added

@@ -147,6 +147,28 @@ It suppresses the header entirely rather than just skipping the synthesis: a
 `Referer` you set on the original request is dropped too, since it names the
 pre-redirect URL and forwarding it would hand that to the new host.
 
+### Sec-Fetch-Site on a redirect hop
+
+A `Sec-Fetch-Site` you set is worked out again for each hop, the way Chrome,
+Firefox and Safari do it. The value only moves towards `cross-site`, and a chain
+that comes back to where it started keeps what it reached:
+
+- `same-origin` stays `same-origin` while the hop stays on its origin. It becomes
+  `same-site` on another host or port of the same site, and `cross-site` on
+  another site.
+- `same-site` stays `same-site` on its site and becomes `cross-site` off it.
+- `none`, the value for a typed navigation, and `cross-site` never change.
+
+A site is the scheme plus the registrable domain from the public suffix list. So
+`www.example.com` and `api.example.com` are one site, and `http://` and
+`https://` on one host are two. When you don't set it, the preset sends `none`
+for a navigation and `cross-site` for a request sniffed as `fetch()`, and a hop
+never changes either. With `ExactHeaders`, a `Sec-Fetch-Site` pair takes the
+hop's value in its own slot.
+
+Firefox itself departs from this rule on plain-HTTP loopback hosts such as
+`http://localhost`. The Firefox presets don't copy that.
+
 ## Retries
 
 Retries are off by default. `WithRetry(n)` turns them on with sensible defaults. `WithRetryConfig` tunes the backoff window and the trigger status codes. The default retry-on-status set is `[429, 500, 502, 503, 504]`.

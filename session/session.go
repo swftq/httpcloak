@@ -11,8 +11,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/url"
 	"os"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -20,6 +22,7 @@ import (
 	"github.com/sardanioss/httpcloak/fingerprint"
 	"github.com/sardanioss/httpcloak/protocol"
 	"github.com/sardanioss/httpcloak/transport"
+	"golang.org/x/net/publicsuffix"
 )
 
 // generateID generates a random session ID (16 bytes = 32 hex chars)
@@ -687,6 +690,25 @@ func (s *Session) requestWithRedirects(ctx context.Context, req *transport.Reque
 					newReq.Headers["Referer"] = []string{ref}
 				}
 			}
+
+			// The next hop's Sec-Fetch-Site follows from the value this hop
+			// carried; see redirectFetchSite. Only a value the caller set can
+			// move. A preset's own is none for a navigation and cross-site for
+			// a request sniffed as fetch(), neither of which a hop changes, and
+			// the transport writes it again on the hop. The value is replaced
+			// under the caller's spelling of the name: a second spelling would
+			// leave the transport two values to pick from.
+			for k, v := range newReq.Headers {
+				if len(v) == 0 || !strings.EqualFold(k, "Sec-Fetch-Site") {
+					continue
+				}
+				if next := redirectFetchSite(v[0], req.URL, redirectURL); next != v[0] {
+					newReq.Headers[k] = []string{next}
+				}
+			}
+			// The transport never reads Headers under ExactHeaders, so there
+			// the pair in the list is the one that reaches the wire.
+			newReq.ExactHeaders = exactHeadersFetchSiteForHop(newReq.ExactHeaders, req.URL, redirectURL)
 
 			// 307/308 preserve the method and the body. Precedence matches the
 			// transport's own: BodyReader wins over Body.
@@ -1931,6 +1953,99 @@ func isSchemeDowngrade(from, to string) bool {
 	fs, _, _ := parseOrigin(from)
 	ts, _, _ := parseOrigin(to)
 	return fs == "https" && ts == "http"
+}
+
+// redirectFetchSite returns the Sec-Fetch-Site to send on a redirect hop from
+// fromURL to toURL, given the value the request to fromURL carried.
+//
+// A browser sends the most cross-site relation between the request's
+// initiator and any URL in its redirect chain, the new one included. Chrome's
+// GetRelationOfURLChainToOrigin, Firefox's SecFetch::AddSecFetchSite and
+// WebKit's computeFetchMetadataSiteAfterRedirection all do this. The session
+// never learns the initiator, but the value the last hop carried pins down as
+// much of it as the next hop needs:
+//   - same-origin: every URL so far was on the initiator's origin, so the
+//     initiator is fromURL's origin. The hop stays same-origin on that
+//     origin, becomes same-site on its site, and cross-site anywhere else.
+//   - same-site: every URL so far was on the initiator's site, which is
+//     fromURL's site. The hop stays same-site there, even back on the
+//     initiator's own origin, and becomes cross-site anywhere else.
+//   - none, sent for a navigation the user started, stays none on every hop,
+//     and cross-site stays cross-site. So does a value no browser sends.
+//
+// That is how WebKit works it out, hop by hop. Chrome 156 and Firefox 159 sent
+// the same values on every hop when captured across a.test, sub.a.test and
+// b.test.
+func redirectFetchSite(site, fromURL, toURL string) string {
+	switch strings.ToLower(strings.TrimSpace(site)) {
+	case "same-origin":
+		if sameOrigin(fromURL, toURL) {
+			return site
+		}
+		if sameSite(fromURL, toURL) {
+			return "same-site"
+		}
+		return "cross-site"
+	case "same-site":
+		if sameSite(fromURL, toURL) {
+			return site
+		}
+		return "cross-site"
+	}
+	return site
+}
+
+// exactHeadersFetchSiteForHop returns the exact header pairs for the next
+// redirect hop. A Sec-Fetch-Site pair gets the value redirectFetchSite works
+// out for it, in its own slot and spelling. Every other pair goes as given and
+// none is added, so a list without the pair gains none. exact is the caller's
+// slice and is never modified.
+func exactHeadersFetchSiteForHop(exact []fingerprint.HeaderPair, fromURL, toURL string) []fingerprint.HeaderPair {
+	var out []fingerprint.HeaderPair // nil until a value changes
+	for i, hp := range exact {
+		if !strings.EqualFold(hp.Key, "Sec-Fetch-Site") {
+			continue
+		}
+		next := redirectFetchSite(hp.Value, fromURL, toURL)
+		if next == hp.Value {
+			continue
+		}
+		if out == nil {
+			out = slices.Clone(exact)
+		}
+		out[i].Value = next
+	}
+	if out == nil {
+		return exact
+	}
+	return out
+}
+
+// sameSite reports whether two URLs are on the same site, as Chrome's
+// SchemefulSite and the HTML spec define it: the same scheme and the same
+// registrable domain, which is the eTLD+1 by the public suffix list with
+// private suffixes such as github.io included. A host with no registrable
+// domain, such as an IP address, localhost or a public suffix itself, is a
+// site of its own. The port never matters.
+func sameSite(a, b string) bool {
+	as, ah, _ := parseOrigin(a)
+	bs, bh, _ := parseOrigin(b)
+	if as == "" || as != bs || ah == "" || bh == "" {
+		return false
+	}
+	return registrableDomain(ah) == registrableDomain(bh)
+}
+
+// registrableDomain returns host's eTLD+1, or host itself when it has none.
+// host must be lowercase, as parseOrigin returns it.
+func registrableDomain(host string) string {
+	if net.ParseIP(host) != nil {
+		return host
+	}
+	if d, err := publicsuffix.EffectiveTLDPlusOne(host); err == nil {
+		return d
+	}
+	return host
 }
 
 // resolveURL resolves a possibly relative URL against a base URL (RFC 3986)
