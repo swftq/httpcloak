@@ -53,7 +53,7 @@ This chapter is a tour of the surface. The types and functions all live in `gith
 | `FetchSiteSameSite` | `same-site` | Same registrable domain, different subdomain. |
 | `FetchSiteCrossSite` | `cross-site` | Different registrable domain. |
 
-`Sec-Fetch-User: ?1` is sent only when the navigation is user-triggered (a click or address-bar entry). Programmatic navigations omit it.
+`Sec-Fetch-User: ?1` is sent only when the navigation is user-triggered (a click or address-bar entry). Programmatic navigations omit it. Safari and Chrome on iOS never send it: WebKit, which both run on, sends the other three and has never implemented this one.
 
 The shape table below covers the cases most callers hit:
 
@@ -121,7 +121,7 @@ h := fingerprint.GenerateSecFetchHeaders(ctx)
 
 `example.com` and `api.example.com` share the registrable domain `example.com`, so `Site` resolves to `same-site`. Swap the target for `https://api.other-site.com/data` and `Site` flips to `cross-site`. Hit the same target with no referrer (typed URL) and `Site` is `none`.
 
-`Sec-Fetch-User` only gets a value when the context is both user-triggered and a navigation. `XHRContext` returns `IsUserTriggered: false`, so `User` stays empty. `NavigationContext` returns `IsUserTriggered: true` with `Mode: navigate`, so `User` is `"?1"`.
+`Sec-Fetch-User` only gets a value when the context is both user-triggered and a navigation. `XHRContext` returns `IsUserTriggered: false`, so `User` stays empty. `NavigationContext` returns `IsUserTriggered: true` with `Mode: navigate`, so `User` is `"?1"`. `GenerateSecFetchHeaders` knows no preset, so it returns `"?1"` for a Safari navigation too; `HeaderCoherence` below leaves it out for the WebKit presets.
 
 ## GenerateClientHints
 
@@ -197,7 +197,7 @@ func (h *HeaderCoherence) ApplyToHeaders(
 
 What it does:
 
-- Writes `Sec-Fetch-Site`, `Sec-Fetch-Mode`, `Sec-Fetch-Dest`. Writes `Sec-Fetch-User: ?1` only on user-triggered navigation; deletes the key otherwise.
+- Writes `Sec-Fetch-Site`, `Sec-Fetch-Mode`, `Sec-Fetch-Dest`. Writes `Sec-Fetch-User: ?1` only on a user-triggered navigation from a preset that sends it, which leaves out the Safari and iOS Chrome presets; deletes the key otherwise.
 - Rewrites `Accept` based on Mode and Dest. Navigation gets the long document string. CORS / same-origin gets `*/*`. No-CORS image gets the preset's image Accept: `image/jxl,image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8` on 155 and newer, and the same string without `image/jxl` on older presets. No-CORS style gets `text/css,*/*;q=0.1`. No-CORS script falls back to `*/*`.
 - Sets `Upgrade-Insecure-Requests: 1` for navigation; deletes it for everything else.
 - Deletes `Cache-Control` for non-navigation modes.
