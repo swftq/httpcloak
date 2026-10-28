@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **`fingerprint.HeaderCoherence.GenerateXHRHeaders` returns the preset's `Accept-Encoding` and `Accept-Language`**: it always returned Chrome's `gzip, deflate, br, zstd` and `en-US,en;q=0.9`, whatever the preset. So for `safari-18`, `safari-18-ios`, `safari-17-ios` and `chrome-143-ios` through `chrome-147-ios` it added zstd, for the `firefox-133` presets it added zstd and gave `q=0.9` instead of their `en-US,en;q=0.5`, and for `chrome-144-macos` it dropped the `en-GB` list. A browser sends `fetch()` and XHR the same pair as every other request: Chrome 156, Firefox 159 and Safari 26.3 each sent one pair on navigations, iframes, `fetch()`, XHR and subresource loads, and a session sends each preset's own pair. The map now carries the preset's values, with Chrome's as the fallback for a preset without them. Nothing on the wire changes, because no session, client or binding path calls `HeaderCoherence`. The programmatic headers page said the session called `ApplyToHeaders` on every request and took `Sec-Fetch-Site` from the previous response URL; it now describes what the session sends, which is `cross-site` and no `Referer` on an API-shaped request unless the caller sets them.
+
 ## [1.7.3] - 2026-10-14
 
 ### Added
