@@ -79,7 +79,7 @@ func TestHeaderPipelineMatchesThePreviousOne(t *testing.T) {
 								frozenApplyPresetHeaders(old, preset, order, nil, tlsOnly, proto, req.Headers, strip, exact)
 								changedSinceTheFreeze(old, preset, order, tlsOnly, proto, exact)
 								frozenMergeCallerHeaders(old, req)
-								applyPresetHeaders(cur, tr.wireHeaders(preset), order, nil, tlsOnly, proto, req.Headers, strip, exact, false)
+								applyPresetHeaders(cur, tr.wireHeaders(preset), order, nil, tlsOnly, proto, req.Headers, strip, exact, requestShape{})
 								mergeCallerHeaders(cur, req)
 								cases++
 								if !reflect.DeepEqual(old.Header, cur.Header) {
@@ -145,7 +145,7 @@ func changedSinceTheFreeze(req *http.Request, preset *fingerprint.Preset, explic
 	for _, n := range explicit {
 		named[strings.ToLower(n)] = true
 	}
-	for _, n := range preset.HeaderOrderFor(req.Header.Get("Sec-Fetch-Dest"), false) {
+	for _, n := range preset.HeaderOrderFor(req.Header.Get("Sec-Fetch-Dest"), false, false) {
 		named[strings.ToLower(n)] = true
 	}
 	rest := len(order)

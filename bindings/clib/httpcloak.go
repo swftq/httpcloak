@@ -175,6 +175,10 @@ type RequestConfig struct {
 	// FetchMode explicitly forces Sec-Fetch-Mode and bypasses auto-sniffing.
 	// Valid values: "cors", "no-cors", "navigate", "websocket". Empty = auto.
 	FetchMode string `json:"fetch_mode,omitempty"`
+	// Initiator names the page API a CORS call stands for: "fetch" for
+	// fetch(), "xhr" for an XMLHttpRequest. Empty decides from the request's
+	// shape, as before. See httpcloak.Request.Initiator.
+	Initiator string `json:"initiator,omitempty"`
 	// FollowRedirects, when non-nil, overrides the session-level redirect
 	// policy for this request. nil leaves the session default in effect.
 	FollowRedirects *bool `json:"follow_redirects,omitempty"`
@@ -892,6 +896,7 @@ func httpcloak_get_raw(handle C.int64_t, url *C.char, optionsJSON *C.char) (hcRe
 		DisableClientHints:            options.DisableClientHints,
 		DisableHighEntropyClientHints: options.DisableHighEntropyClientHints,
 		DisableRedirectReferer:        options.DisableRedirectReferer,
+		Initiator:                     options.Initiator,
 	}
 
 	resp, err := session.Do(ctx, req)
@@ -974,6 +979,7 @@ func httpcloak_post_raw(handle C.int64_t, url *C.char, body *C.char, bodyLen C.i
 		DisableClientHints:            options.DisableClientHints,
 		DisableHighEntropyClientHints: options.DisableHighEntropyClientHints,
 		DisableRedirectReferer:        options.DisableRedirectReferer,
+		Initiator:                     options.Initiator,
 	}
 
 	resp, err := session.Do(ctx, req)
@@ -1053,6 +1059,7 @@ func httpcloak_request_raw(handle C.int64_t, requestJSON *C.char, body *C.char, 
 		DisableClientHints:            config.DisableClientHints,
 		DisableHighEntropyClientHints: config.DisableHighEntropyClientHints,
 		DisableRedirectReferer:        config.DisableRedirectReferer,
+		Initiator:                     config.Initiator,
 	}
 
 	resp, err := session.Do(ctx, req)
@@ -1473,6 +1480,10 @@ type RequestOptions struct {
 	// FetchMode explicitly forces Sec-Fetch-Mode and bypasses auto-sniffing.
 	// Valid values: "cors", "no-cors", "navigate", "websocket". Empty = auto.
 	FetchMode string `json:"fetch_mode,omitempty"`
+	// Initiator names the page API a CORS call stands for: "fetch" for
+	// fetch(), "xhr" for an XMLHttpRequest. Empty decides from the request's
+	// shape, as before. See httpcloak.Request.Initiator.
+	Initiator string `json:"initiator,omitempty"`
 	// FollowRedirects, when non-nil, overrides the session-level redirect
 	// policy for this request. nil leaves the session default in effect.
 	FollowRedirects *bool `json:"follow_redirects,omitempty"`
@@ -1541,6 +1552,7 @@ func httpcloak_get(handle C.int64_t, url *C.char, optionsJSON *C.char) (hcRet *C
 		DisableClientHints:            options.DisableClientHints,
 		DisableHighEntropyClientHints: options.DisableHighEntropyClientHints,
 		DisableRedirectReferer:        options.DisableRedirectReferer,
+		Initiator:                     options.Initiator,
 	}
 
 	resp, err := session.Do(ctx, req)
@@ -1608,6 +1620,7 @@ func httpcloak_post(handle C.int64_t, url *C.char, body *C.char, optionsJSON *C.
 		DisableClientHints:            options.DisableClientHints,
 		DisableHighEntropyClientHints: options.DisableHighEntropyClientHints,
 		DisableRedirectReferer:        options.DisableRedirectReferer,
+		Initiator:                     options.Initiator,
 	}
 
 	resp, err := session.Do(ctx, req)
@@ -1670,6 +1683,7 @@ func httpcloak_request(handle C.int64_t, requestJSON *C.char) (hcRet *C.char) {
 		DisableClientHints:            config.DisableClientHints,
 		DisableHighEntropyClientHints: config.DisableHighEntropyClientHints,
 		DisableRedirectReferer:        config.DisableRedirectReferer,
+		Initiator:                     config.Initiator,
 	}
 
 	resp, err := session.Do(ctx, req)
@@ -1803,6 +1817,7 @@ func httpcloak_get_async(handle C.int64_t, url *C.char, optionsJSON *C.char, cal
 			DisableClientHints:            options.DisableClientHints,
 			DisableHighEntropyClientHints: options.DisableHighEntropyClientHints,
 			DisableRedirectReferer:        options.DisableRedirectReferer,
+			Initiator:                     options.Initiator,
 		}
 
 		resp, err := session.Do(ctx, req)
@@ -1924,6 +1939,7 @@ func httpcloak_post_async(handle C.int64_t, url *C.char, body *C.char, optionsJS
 			DisableClientHints:            options.DisableClientHints,
 			DisableHighEntropyClientHints: options.DisableHighEntropyClientHints,
 			DisableRedirectReferer:        options.DisableRedirectReferer,
+			Initiator:                     options.Initiator,
 		}
 
 		resp, err := session.Do(ctx, req)
@@ -2036,6 +2052,7 @@ func httpcloak_request_async(handle C.int64_t, requestJSON *C.char, callbackID C
 			DisableClientHints:            config.DisableClientHints,
 			DisableHighEntropyClientHints: config.DisableHighEntropyClientHints,
 			DisableRedirectReferer:        config.DisableRedirectReferer,
+			Initiator:                     config.Initiator,
 		}
 
 		resp, err := session.Do(ctx, req)
@@ -3616,6 +3633,7 @@ func httpcloak_stream_get(sessionHandle C.int64_t, url *C.char, optionsJSON *C.c
 		DisableClientHints:            options.DisableClientHints,
 		DisableHighEntropyClientHints: options.DisableHighEntropyClientHints,
 		DisableRedirectReferer:        options.DisableRedirectReferer,
+		Initiator:                     options.Initiator,
 	}
 
 	resp, err := session.DoStream(ctx, req)
@@ -3683,6 +3701,7 @@ func httpcloak_stream_post(sessionHandle C.int64_t, url *C.char, body *C.char, o
 		DisableClientHints:            options.DisableClientHints,
 		DisableHighEntropyClientHints: options.DisableHighEntropyClientHints,
 		DisableRedirectReferer:        options.DisableRedirectReferer,
+		Initiator:                     options.Initiator,
 	}
 
 	resp, err := session.DoStream(ctx, req)
@@ -3757,6 +3776,7 @@ func httpcloak_stream_request(sessionHandle C.int64_t, requestJSON *C.char) (hcR
 		DisableClientHints:            config.DisableClientHints,
 		DisableHighEntropyClientHints: config.DisableHighEntropyClientHints,
 		DisableRedirectReferer:        config.DisableRedirectReferer,
+		Initiator:                     config.Initiator,
 	}
 
 	resp, err := session.DoStream(ctx, req)
@@ -3876,6 +3896,7 @@ func httpcloak_stream_request_async(sessionHandle C.int64_t, requestJSON *C.char
 			DisableClientHints:            config.DisableClientHints,
 			DisableHighEntropyClientHints: config.DisableHighEntropyClientHints,
 			DisableRedirectReferer:        config.DisableRedirectReferer,
+			Initiator:                     config.Initiator,
 		}
 
 		resp, err := session.DoStream(streamCtx, req)

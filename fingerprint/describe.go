@@ -336,6 +336,12 @@ func flattenHTTP2(p *Preset) *HTTP2Spec {
 	h1 := p.SendsPriorityOverHTTP1()
 	out.PriorityOverHTTP1 = &h1
 
+	// Only when the preset sets it, like the second header orders: a client
+	// that sends an XMLHttpRequest the way it sends a fetch() has nothing to say.
+	if hv, ok := p.XHRPriorityHeader(); ok {
+		out.XHRPriorityHeader = &hv
+	}
+
 	return out
 }
 

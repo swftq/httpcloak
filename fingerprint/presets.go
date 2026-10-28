@@ -510,6 +510,13 @@ type H2FingerprintConfig struct {
 	// PriorityOverHTTP1 says whether the table's priority header also goes
 	// out on HTTP/1.1. nil derives it; see SendsPriorityOverHTTP1.
 	PriorityOverHTTP1 *bool
+
+	// XHRPriorityHeader is the priority header an XMLHttpRequest sends in
+	// place of the one the table gives a fetch(), the "empty" entry. nil means
+	// the same header as a fetch(), and an empty string means none, which is
+	// what Firefox sends. The HTTP/2 weight stays the "empty" entry's, as
+	// Firefox sends both at 22.
+	XHRPriorityHeader *string
 }
 
 // OtherHeaders, in a header order, marks the place for every header the order
@@ -861,13 +868,15 @@ func (p *Preset) H2SettingsOrder() []uint16 {
 }
 
 // H2HeaderOrderFor returns the wire header order for a request with the given
-// sec-fetch-dest that is not a redirect hop. See HeaderOrderFor.
+// sec-fetch-dest that is neither a redirect hop nor an XMLHttpRequest. See
+// HeaderOrderFor.
 func (p *Preset) H2HeaderOrderFor(dest string) []string {
-	return p.HeaderOrderFor(dest, false)
+	return p.HeaderOrderFor(dest, false, false)
 }
 
 // HeaderOrderFor returns the wire header order for a request with the given
-// sec-fetch-dest. redirectHop marks a request built to follow a 3xx.
+// sec-fetch-dest. redirectHop marks a request built to follow a 3xx, and xhr
+// one an XMLHttpRequest made rather than a fetch().
 //
 // Chrome emits a different order for a top-level navigation than for everything
 // the page then fetches, so a preset carrying one order gets one of the two
@@ -876,9 +885,10 @@ func (p *Preset) H2HeaderOrderFor(dest string) []string {
 //
 // Firefox splits elsewhere: a fetch(), which is what sec-fetch-dest empty
 // means here, and every redirect hop settle Referer earlier than other
-// requests, and take HPACKHeaderOrderEarlyReferer when the preset has one.
-func (p *Preset) HeaderOrderFor(dest string, redirectHop bool) []string {
-	if p.H2Config != nil && len(p.H2Config.HPACKHeaderOrderEarlyReferer) > 0 && (redirectHop || dest == "empty") {
+// requests, and take HPACKHeaderOrderEarlyReferer when the preset has one. An
+// XMLHttpRequest settles it late on its first hop, like a navigation.
+func (p *Preset) HeaderOrderFor(dest string, redirectHop, xhr bool) []string {
+	if p.H2Config != nil && len(p.H2Config.HPACKHeaderOrderEarlyReferer) > 0 && (redirectHop || dest == "empty" && !xhr) {
 		return p.H2Config.HPACKHeaderOrderEarlyReferer
 	}
 	if dest == "" || dest == "document" || dest == "iframe" {
@@ -968,6 +978,17 @@ func (p *Preset) H2PriorityFor(dest string) (weight uint16, exclusive bool, head
 	// sets it on every stream and Firefox on none. It used to be true here
 	// unconditionally, which gave Firefox presets Chromium's flag.
 	return weight, p.HTTP2Settings.StreamExclusive, PriorityHeaderFromResource(rp), true
+}
+
+// XHRPriorityHeader returns the priority header an XMLHttpRequest sends, and
+// whether the preset says anything about it. With ok false an XMLHttpRequest
+// sends what H2PriorityFor gives its sec-fetch-dest, like a fetch(). An empty
+// header means the request carries none.
+func (p *Preset) XHRPriorityHeader() (header string, ok bool) {
+	if p.H2Config != nil && p.H2Config.XHRPriorityHeader != nil {
+		return *p.H2Config.XHRPriorityHeader, true
+	}
+	return "", false
 }
 
 // H2PriorityModel is the preset's PriorityModel, or, when it does not set one,
@@ -1263,6 +1284,7 @@ var (
 // firefoxH2Config returns the explicit H2 fingerprint config for Firefox presets.
 func firefoxH2Config() *H2FingerprintConfig {
 	f := false
+	none := "" // Firefox 159 sent no priority header on any XMLHttpRequest
 	return &H2FingerprintConfig{
 		HPACKHeaderOrder:             firefoxHeaderOrder(false),
 		HPACKHeaderOrderEarlyReferer: firefoxHeaderOrder(true),
@@ -1273,6 +1295,7 @@ func firefoxH2Config() *H2FingerprintConfig {
 		PseudoHeaderOrder:            []string{":method", ":path", ":authority", ":scheme"},
 		PriorityTable:                firefoxPriorityTable(),
 		PriorityModel:                PriorityModelTable,
+		XHRPriorityHeader:            &none,
 	}
 }
 
@@ -1327,8 +1350,9 @@ func firefoxHeaderOrder(earlyReferer bool) []string {
 //
 // A dest Firefox varies within is entered at its most common form: script is
 // a parser-blocking <script> (async, defer and module scripts send no header
-// at the same weight), empty is fetch() (an XMLHttpRequest sends no header),
-// and image is an <img> (a preload or a lazy image goes at 11). A dest that is
+// at the same weight), empty is fetch() (an XMLHttpRequest sends no header at
+// the same weight; see XHRPriorityHeader), and image is an <img> (a preload or
+// a lazy image goes at 11). A dest that is
 // not here falls back to the static weight, 42, which is Firefox's document.
 func firefoxPriorityTable() map[string]ResourcePriority {
 	return map[string]ResourcePriority{

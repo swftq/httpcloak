@@ -298,6 +298,7 @@ How header compression and stream priorities behave on the wire.
 | `stream_priority_mode` | string | `"chrome"`, `"default"` |
 | `disable_cookie_split` | bool | When true, the `Cookie:` header is sent as one line instead of split into multiple HPACK entries. |
 | `hpack_never_index` | string[] | Lowercase header names that must be sent without HPACK indexing. |
+| `xhr_priority_header` | string | The `priority` header a request sent with `initiator: "xhr"` carries instead of the one `priority_table` gives `empty`. `""` sends none, which is what Firefox does. The HTTP/2 weight stays the `empty` entry's. Omit it and an `XMLHttpRequest` sends what a `fetch()` does. |
 
 `hpack_header_order` orders HTTP/1.1 headers too. Name `connection` in it to put HTTP/1.1's `Connection` header at that place, as the Firefox presets do after `origin`. Leave it out and `Connection` goes right after `Host`, where Chrome sends it. HTTP/2 and HTTP/3 carry no `Connection`, so the entry changes nothing there.
 

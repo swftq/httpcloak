@@ -29,9 +29,9 @@ func TestPresetWireHeadersMatchFreshDerivation(t *testing.T) {
 					wantReq, _ := http.NewRequest("GET", "https://api.example.com/v1/items/42", nil)
 
 					// The same cache entry, reused the way a transport reuses it.
-					applyPresetHeaders(gotReq, cached, nil, nil, tlsOnly, protocol, userHeaders, strip, nil, false)
+					applyPresetHeaders(gotReq, cached, nil, nil, tlsOnly, protocol, userHeaders, strip, nil, requestShape{})
 					// A derivation of its own, as the very first request does.
-					applyPresetHeaders(wantReq, newPresetWireHeaders(preset), nil, nil, tlsOnly, protocol, userHeaders, strip, nil, false)
+					applyPresetHeaders(wantReq, newPresetWireHeaders(preset), nil, nil, tlsOnly, protocol, userHeaders, strip, nil, requestShape{})
 
 					if !reflect.DeepEqual(gotReq.Header, wantReq.Header) {
 						t.Fatalf("preset %s protocol=%s strip=%v tlsOnly=%v: reused cache wrote\n%v\nfresh derivation wrote\n%v",
@@ -90,7 +90,7 @@ func TestPresetWireHeadersUserAgentWins(t *testing.T) {
 		t.Skip("preset unavailable")
 	}
 	req, _ := http.NewRequest("GET", "https://api.example.com/v1/items/42", nil)
-	applyPresetHeaders(req, newPresetWireHeaders(preset), nil, nil, false, "h2", nil, false, nil, false)
+	applyPresetHeaders(req, newPresetWireHeaders(preset), nil, nil, false, "h2", nil, false, nil, requestShape{})
 	if got := req.Header.Get("User-Agent"); got != preset.UserAgent {
 		t.Errorf("User-Agent = %q, want %q", got, preset.UserAgent)
 	}
@@ -106,7 +106,7 @@ func TestPresetWireHeadersValuesAreIsolated(t *testing.T) {
 		t.Skip("preset unavailable")
 	}
 	req, _ := http.NewRequest("GET", "https://api.example.com/v1/items/42", nil)
-	applyPresetHeaders(req, newPresetWireHeaders(preset), nil, nil, false, "h2", nil, false, nil, false)
+	applyPresetHeaders(req, newPresetWireHeaders(preset), nil, nil, false, "h2", nil, false, nil, requestShape{})
 
 	before := map[string][]string{}
 	for k, v := range req.Header {

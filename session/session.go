@@ -640,8 +640,10 @@ func (s *Session) requestWithRedirects(ctx context.Context, req *transport.Reque
 				OnRedirect:                    req.OnRedirect,
 
 				// A browser settles a hop's Referer differently from a first
-				// request's, and Firefox orders the hop's headers to match.
+				// request's, and Firefox orders the hop's headers to match. The
+				// page API that made the request is the same on every hop.
 				RedirectHop: true,
+				Initiator:   req.Initiator,
 
 				// ExactHeaders has to survive the hop. Its whole contract is that
 				// nothing else is added, and dropping it here meant a caller

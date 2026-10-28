@@ -267,6 +267,51 @@ var r = session.Get("https://httpbin.org/headers", headers: new() {
 
 To lead the preset's header order with headers of your own, use `SetHeaderOrder` on the session. See [Reference: Options](/reference/options) for that one.
 
+### fetch() or XMLHttpRequest
+
+A page's API calls go out as CORS requests, and a browser sends a `fetch()` and an `XMLHttpRequest` differently even though their headers carry the same values. Firefox sends an `XMLHttpRequest` with no `Priority` header, and on its first hop with `Referer` after `Connection` instead of right after `Accept-Encoding`. Nothing in the request says which one the page used, so `initiator` says it: `"fetch"` or `"xhr"`.
+
+Either value also makes the request a CORS call (`Sec-Fetch-Mode: cors`, `Sec-Fetch-Dest: empty`) unless you set those headers yourself. Leave it out and the session decides from the request's shape, as before, and sends a CORS call as a `fetch()`. Only presets that know how an `XMLHttpRequest` differs change anything, which today means the Firefox presets; the others send one exactly like a `fetch()`. Any other value fails the request.
+
+<Tabs groupId="lang">
+<TabItem value="go" label="Go">
+
+```go
+resp, err := sess.Do(ctx, &httpcloak.Request{
+	Method:    "POST",
+	URL:       "https://example.com/api/cart",
+	Body:      strings.NewReader(`{"sku":1}`),
+	Headers:   map[string][]string{"Content-Type": {"application/json"}},
+	Initiator: httpcloak.InitiatorXHR,
+})
+```
+
+</TabItem>
+<TabItem value="python" label="Python">
+
+```python
+r = session.post("https://example.com/api/cart", json={"sku": 1}, initiator="xhr")
+```
+
+</TabItem>
+<TabItem value="node" label="Node.js">
+
+```javascript
+const r = await session.post("https://example.com/api/cart", { json: { sku: 1 }, initiator: "xhr" });
+```
+
+</TabItem>
+<TabItem value="dotnet" label=".NET">
+
+```csharp
+var r = session.PostJson("https://example.com/api/cart", new { sku = 1 }, initiator: "xhr");
+```
+
+</TabItem>
+</Tabs>
+
+The session carries it onto every redirect hop.
+
 ## Cookies
 
 The session has a built-in cookie jar. It captures `Set-Cookie` from every response and replays the right cookies on subsequent requests, scoped to domain and path the way browsers do.
