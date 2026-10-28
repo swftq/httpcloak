@@ -511,7 +511,7 @@ type Request struct {
 	FetchMode     FetchMode // Fetch mode: Navigate (default, human click) or CORS (XHR/fetch) or NoCors (subresource)
 	FetchSite     FetchSite // Sec-Fetch-Site: Auto (default), None, SameOrigin, SameSite, CrossSite
 	FetchDest     string    // Sec-Fetch-Dest for NoCors mode: "script", "style", "image" (empty = use mode default)
-	Referer       string    // Referer header (used for auto-detecting FetchSite)
+	Referer       string    // Referer header (used for auto-detecting FetchSite and the CORS Origin); a Referer in Headers replaces it
 
 	// Authentication (overrides client-level auth)
 	Auth Auth
@@ -1980,7 +1980,7 @@ func applyModeHeaders(httpReq *http.Request, preset *fingerprint.Preset, req *Re
 
 	// THEN: Set Sec-Fetch-Site based on the ACTUAL mode
 	// sec-fetch-site: none is ONLY valid for navigation, never for CORS
-	secFetchSite := detectSecFetchSiteForMode(req.FetchSite, parsedURL, req.Referer, effectiveMode)
+	secFetchSite := detectSecFetchSiteForMode(req.FetchSite, parsedURL, requestReferer(req), effectiveMode)
 	httpReq.Header.Set("Sec-Fetch-Site", secFetchSite)
 
 	// Apply mode-specific headers - EVERYTHING is coherent
@@ -2207,8 +2207,8 @@ func applyCORSModeHeaders(httpReq *http.Request, preset *fingerprint.Preset, req
 	// NO Cache-Control for CORS
 
 	// Origin header - required for CORS
-	if req.Referer != "" {
-		if refURL, err := url.Parse(req.Referer); err == nil {
+	if referer := requestReferer(req); referer != "" {
+		if refURL, err := url.Parse(referer); err == nil {
 			httpReq.Header.Set("Origin", refURL.Scheme+"://"+refURL.Host)
 		}
 	} else {
@@ -2342,6 +2342,19 @@ func detectSecFetchSiteForMode(fetchSite FetchSite, requestURL *url.URL, referer
 
 	// Different sites
 	return "cross-site"
+}
+
+// requestReferer returns the Referer the request goes out with. Caller headers
+// are applied after the Referer field and replace it, so a Referer in Headers
+// wins here too, even an empty one. Reading only the field sent a header-only
+// Referer, the only kind httpcloak.Client can set, beside Sec-Fetch-Site: none
+// on a navigation, and a CORS request claimed the target's own origin as its
+// Origin.
+func requestReferer(req *Request) string {
+	if v, ok := getHeaderCaseInsensitive(req.Headers, "Referer"); ok && len(v) > 0 {
+		return v[0]
+	}
+	return req.Referer
 }
 
 // extractSite extracts the registrable domain (eTLD+1) from a hostname
