@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **A JSON preset's client hints go out quoted**: the JSON spec documents bare values such as `"platform_version": "19.0.0"` and `"arch": "x86"`, and they went out as `sec-ch-ua-platform-version: 19.0.0` and `sec-ch-ua-arch: x86`. Chrome sends both as structured-field strings, `"19.0.0"` and `"x86"`, and so do the built-in presets. The loader now quotes a bare `platform_version`, `arch`, `bitness` or `model`, and keeps a value that is already quoted. `wow64` and `full_version_list` are used as written.
+
 ## [1.7.3] - 2026-10-14
 
 ### Added

@@ -1281,25 +1281,52 @@ func applyHeaders(p *Preset, spec *HeaderSpec) {
 // the preset, leaving unset fields to be derived at resolve time. Called after
 // the base preset has been cloned (based_on inheritance), so a child overrides
 // only the fields it specifies.
+//
+// The string hints go on the wire as structured-field strings, quotes included,
+// which is how Chrome sends them and how the built-in defaults are stored. A
+// JSON preset naturally writes the bare value, "19.0.0" rather than
+// "\"19.0.0\"", and that used to go out unquoted, which no browser sends. So a
+// bare value is quoted here and one already in quotes is kept. wow64 is a
+// boolean and full_version_list a list, so both are used as written.
 func applyClientHintsSpec(p *Preset, spec *ClientHintsSpec) {
 	if spec.FullVersionList != "" {
 		p.ClientHints.FullVersionList = spec.FullVersionList
 	}
 	if spec.PlatformVersion != "" {
-		p.ClientHints.PlatformVersion = spec.PlatformVersion
+		p.ClientHints.PlatformVersion = sfString(spec.PlatformVersion)
 	}
 	if spec.Arch != "" {
-		p.ClientHints.Arch = spec.Arch
+		p.ClientHints.Arch = sfString(spec.Arch)
 	}
 	if spec.Bitness != "" {
-		p.ClientHints.Bitness = spec.Bitness
+		p.ClientHints.Bitness = sfString(spec.Bitness)
 	}
 	if spec.Model != "" {
-		p.ClientHints.Model = spec.Model
+		p.ClientHints.Model = sfString(spec.Model)
 	}
 	if spec.Wow64 != "" {
 		p.ClientHints.Wow64 = spec.Wow64
 	}
+}
+
+// sfString returns v as a structured-field string (RFC 8941 3.3.3): in double
+// quotes, with backslash and double quote escaped. A value already in quotes is
+// returned as it is.
+func sfString(v string) string {
+	if len(v) >= 2 && v[0] == '"' && v[len(v)-1] == '"' {
+		return v
+	}
+	var b strings.Builder
+	b.Grow(len(v) + 2)
+	b.WriteByte('"')
+	for i := range len(v) {
+		if c := v[i]; c == '"' || c == '\\' {
+			b.WriteByte('\\')
+		}
+		b.WriteByte(v[i])
+	}
+	b.WriteByte('"')
+	return b.String()
 }
 
 func applyTCP(p *Preset, spec *TCPSpec) error {

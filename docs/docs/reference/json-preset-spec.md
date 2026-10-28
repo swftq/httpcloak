@@ -487,6 +487,12 @@ rather than part of the default header block.
 it carries the exact build number, which cannot be derived from the major
 version. `model` is empty on desktop and set on Android.
 
+Write the string hints bare, as above. `platform_version`, `arch`, `bitness` and
+`model` go out as structured-field strings, quoted the way Chrome sends them, so
+`"19.0.0"` here becomes `sec-ch-ua-platform-version: "19.0.0"`. A value you have
+already quoted (`"\"19.0.0\""`) is used as it is. `wow64` is a boolean and
+`full_version_list` a list, so both go out exactly as written.
+
 ## `tcp` object
 
 The TCP/IP layer fingerprint. TTL, MSS, window size and scale, the Don't Fragment bit.
