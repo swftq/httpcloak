@@ -271,7 +271,7 @@ func NewSessionWithOptions(id string, config *protocol.SessionConfig, opts *Sess
 
 // Request executes an HTTP request within this session
 func (s *Session) Request(ctx context.Context, req *transport.Request) (*transport.Response, error) {
-	return s.requestWithRedirects(ctx, req, 0, nil)
+	return s.requestWithRedirects(ctx, req, 0, nil, nil)
 }
 
 // cloneHeaders returns a deep copy of a header map (keys + value slices).
@@ -287,8 +287,10 @@ func cloneHeaders(h map[string][]string) map[string][]string {
 	return out
 }
 
-// requestWithRedirects handles the actual request with redirect following
-func (s *Session) requestWithRedirects(ctx context.Context, req *transport.Request, redirectCount int, history []*transport.RedirectInfo) (*transport.Response, error) {
+// requestWithRedirects handles the actual request with redirect following.
+// chain is nil on the first request and carries the chain's Origin state to
+// every hop after it.
+func (s *Session) requestWithRedirects(ctx context.Context, req *transport.Request, redirectCount int, history []*transport.RedirectInfo, chain *redirectOrigin) (*transport.Response, error) {
 	// Work on a private copy of the caller's request. The session mutates
 	// req.Headers (cache-control, conditional-cache validators, cookies, client
 	// hints) outside any lock the caller knows about; if a caller shares one
@@ -613,6 +615,20 @@ func (s *Session) requestWithRedirects(ctx context.Context, req *transport.Reque
 				}
 			}
 
+			// The hop's Origin is worked out afresh, from the request's origin
+			// and mode as the first request set them, this hop's method, and the
+			// URLs the chain has been through; see redirectOrigin. An exact
+			// header list keeps its Origin pair to the same rule, in its own slot
+			// and spelling.
+			if chain == nil {
+				chain = s.newRedirectOrigin(req)
+			}
+			hopOrigin, sendOrigin := chain.next(req.URL, redirectURL, newMethod)
+			exactHeaders := req.ExactHeaders
+			if chain.mode != "" {
+				exactHeaders = exactOriginForHop(req.ExactHeaders, hopOrigin, sendOrigin)
+			}
+
 			// Create redirect request. Everything below the first four fields is
 			// a property of the caller's request rather than of one hop, and
 			// dropping them silently downgraded every hop after the first back to
@@ -644,8 +660,10 @@ func (s *Session) requestWithRedirects(ctx context.Context, req *transport.Reque
 				// mirroring a captured request got their exact bytes on the first
 				// request and the full preset pipeline on every hop after it,
 				// silently. Referer is the one thing the redirect path may still
-				// add on top, and DisableRedirectReferer turns that off.
-				ExactHeaders: req.ExactHeaders,
+				// add on top, and DisableRedirectReferer turns that off. An
+				// Origin pair is rewritten or left out in place; see
+				// exactOriginForHop.
+				ExactHeaders: exactHeaders,
 			}
 
 			// Copy safe headers
@@ -663,6 +681,10 @@ func (s *Session) requestWithRedirects(ctx context.Context, req *transport.Reque
 					continue
 				}
 				if (crossOrigin || schemeDowngrade) && (lk == "authorization" || lk == "proxy-authorization") {
+					continue
+				}
+				// Origin is worked out below, unless the chain leaves it alone.
+				if lk == "origin" && chain.mode != "" {
 					continue
 				}
 				newReq.Headers[k] = v
@@ -686,6 +708,26 @@ func (s *Session) requestWithRedirects(ctx context.Context, req *transport.Reque
 				if ref := redirectReferer(req.URL, schemeDowngrade, crossOrigin); ref != "" {
 					newReq.Headers["Referer"] = []string{ref}
 				}
+			}
+
+			// The Origin worked out above goes under the caller's spelling of
+			// the name, or the canonical one on a hop that gains it.
+			if chain.mode != "" && sendOrigin {
+				key, _ := headerEntry(req.Headers, "Origin")
+				if key == "" {
+					key = "Origin"
+				}
+				newReq.Headers[key] = []string{hopOrigin}
+			}
+			// A chain the transport sniffed into cors mode stays in it. The sniff
+			// reads each hop afresh, and once a 303 has turned a fetch-shaped
+			// POST into a bare GET it would send the hop as a navigation, with a
+			// navigation's Accept, while Chrome and Firefox keep the request's
+			// mode. Naming the mode keeps the hop's Sec-Fetch-* and its Origin
+			// in step. A hop that keeps its method sniffs the same as before, so
+			// only a method change needs it.
+			if chain.sniffed && newMethod != req.Method {
+				newReq.Headers["Sec-Fetch-Mode"] = []string{"cors"}
 			}
 
 			// 307/308 preserve the method and the body. Precedence matches the
@@ -734,7 +776,7 @@ func (s *Session) requestWithRedirects(ctx context.Context, req *transport.Reque
 			resp.Close()
 
 			// Follow redirect with accumulated history
-			return s.requestWithRedirects(ctx, newReq, redirectCount+1, history)
+			return s.requestWithRedirects(ctx, newReq, redirectCount+1, history, chain)
 		}
 	}
 
@@ -1931,6 +1973,213 @@ func isSchemeDowngrade(from, to string) bool {
 	fs, _, _ := parseOrigin(from)
 	ts, _, _ := parseOrigin(to)
 	return fs == "https" && ts == "http"
+}
+
+// redirectOrigin is what a redirect chain's Origin header depends on, carried
+// from hop to hop.
+//
+// Fetch never copies Origin onto a hop. HTTP-redirect fetch appends the new URL
+// to the request's URL list and runs main fetch again, which appends Origin for
+// the new request from scratch. So a hop's Origin follows from the request's
+// origin and mode, the hop's method and the URLs the chain has passed through.
+// Chrome 156 and Firefox 159 did exactly this for fetch(), XHR, no-cors
+// fetch(), iframes, navigations and form POSTs redirected with 302, 303, 307
+// and 308 within one origin, to another origin and back, and from https to
+// http:
+//   - A cors request carries Origin once any URL in the chain is off the
+//     request's origin (Fetch's response tainting "cors"), whatever its method,
+//     and before that only when the method is not GET or HEAD. So a fetch() GET
+//     to its own origin gains Origin when redirected away, and the GET after a
+//     fetch() POST's 303 carries it only off that origin.
+//   - Any other request carries Origin only when its method is not GET or
+//     HEAD: none on a navigation's or iframe's GET hops, none on the GET after
+//     a form POST's 303.
+//   - The value is "null" once a hop has left a URL off the request's origin
+//     for another origin: Fetch's redirect-taint, and WebKit's opaque origin in
+//     SubresourceLoader.
+//   - Outside cors mode it is also "null" on a hop from an https origin to a
+//     URL that is not https, by Fetch's default referrer policy.
+//
+// Chromium differs outside cors mode. Its network stack sets an Origin the
+// request carries to "null" on every redirect to another origin, so a form or
+// no-cors POST answered with 307 or 308 sends "null" from its first hop off
+// the page's origin, where Firefox and Fetch keep the page's origin. Only
+// Chromium presets do that; see chromiumPreset.
+type redirectOrigin struct {
+	// mode is the Sec-Fetch-Mode the first request went out with; see
+	// transport.FetchMode. A request that went out with none, a TLS-only one
+	// or one on a preset without Sec-Fetch-*, does not say which browser
+	// request it is, so mode is "" and every hop carries the caller's Origin
+	// unchanged.
+	mode string
+	// origin is the request's origin, serialized: the caller's Origin on the
+	// first request, else the first URL's origin, since a browser sends a cors
+	// GET without Origin only to its own origin.
+	origin   string
+	chromium bool
+	// sniffed is set when mode is "cors" only because the transport sniffed it
+	// from the request's shape.
+	sniffed bool
+
+	tainted bool // a hop has left a URL off origin for another origin
+	crossed bool // a hop has gone to another origin than the URL it left
+	cors    bool // a URL in the chain is off origin: response tainting "cors"
+}
+
+// newRedirectOrigin starts the Origin state for the chain req begins.
+func (s *Session) newRedirectOrigin(req *transport.Request) *redirectOrigin {
+	ro := &redirectOrigin{mode: s.transport.FetchMode(req), chromium: s.chromiumPreset()}
+	var callerMode string
+	if len(req.ExactHeaders) > 0 {
+		for _, hp := range req.ExactHeaders {
+			if strings.EqualFold(hp.Key, "Origin") {
+				ro.origin = hp.Value
+				break
+			}
+		}
+	} else {
+		_, ro.origin = headerEntry(req.Headers, "Origin")
+		_, callerMode = headerEntry(req.Headers, "Sec-Fetch-Mode")
+	}
+	if ro.origin == "" {
+		ro.origin = serializeOrigin(req.URL)
+	}
+	if ro.origin == "" {
+		ro.mode = "" // no origin to send, so leave the caller's Origin as it is
+	}
+	ro.sniffed = ro.mode == "cors" && len(req.ExactHeaders) == 0 && callerMode == ""
+	ro.cors = ro.mode == "cors" && !sameOrigin(ro.origin, req.URL)
+	return ro
+}
+
+// next moves the chain on by the hop from the URL that answered with a
+// redirect to the URL it named, taken with method, and returns the Origin
+// that hop carries; ok is false when it carries none. Meaningless when mode
+// is "".
+func (ro *redirectOrigin) next(from, to, method string) (origin string, ok bool) {
+	if !sameOrigin(from, to) {
+		ro.crossed = true
+		if !sameOrigin(ro.origin, from) {
+			ro.tainted = true
+		}
+	}
+	if ro.mode == "cors" && !sameOrigin(ro.origin, to) {
+		ro.cors = true
+	}
+	serialized := ro.origin
+	if ro.tainted {
+		serialized = "null"
+	}
+	method = strings.ToUpper(method)
+	switch {
+	case ro.cors:
+		return serialized, true
+	case method == "" || method == "GET" || method == "HEAD":
+		return "", false
+	case ro.mode == "cors":
+		return serialized, true
+	case ro.chromium:
+		// Chromium's network stack keeps the Origin a request carries and
+		// sets it to "null" on a redirect to another origin.
+		if ro.crossed {
+			return "null", true
+		}
+		return ro.origin, true
+	case isHTTPS(ro.origin) && !isHTTPS(to):
+		return "null", true
+	}
+	return serialized, true
+}
+
+// chromiumPreset reports whether the session's preset is desktop or Android
+// Chrome. The TLS identity is the signal, as it is for Chrome's QUIC transport
+// parameters: Firefox, Safari and Chrome on iOS, which runs on WebKit, all
+// present another.
+func (s *Session) chromiumPreset() bool {
+	presetName := ""
+	if s.Config != nil {
+		presetName = s.Config.Preset
+	}
+	p := fingerprint.Get(presetName)
+	return p != nil && p.ClientHelloID.Client == "Chrome"
+}
+
+// exactOriginForHop returns the exact header pairs for the next redirect hop,
+// with an Origin pair carried the way the Origin header is (see
+// redirectOrigin): given the hop's value in its own slot and spelling, or left
+// out when send is false. Every other pair goes as given, none is ever added,
+// and exact is not modified.
+//
+// The result is never empty, which would switch exact mode off. The chain only
+// judges Origin under ExactHeaders when the list names a Sec-Fetch-Mode, and
+// that pair always stays.
+func exactOriginForHop(exact []fingerprint.HeaderPair, origin string, send bool) []fingerprint.HeaderPair {
+	var out []fingerprint.HeaderPair // nil until an Origin pair is found
+	for i, hp := range exact {
+		if !strings.EqualFold(hp.Key, "Origin") {
+			if out != nil {
+				out = append(out, hp)
+			}
+			continue
+		}
+		if out == nil {
+			out = append(make([]fingerprint.HeaderPair, 0, len(exact)), exact[:i]...)
+		}
+		if send {
+			out = append(out, fingerprint.HeaderPair{Key: hp.Key, Value: origin})
+		}
+	}
+	if out == nil {
+		return exact
+	}
+	return out
+}
+
+// headerEntry returns the name under which h holds the header called name,
+// as the caller spelled it, and its first value; key is "" when h has none.
+// name must be in canonical form. Should a caller have set the header under
+// two spellings, the canonical one wins, then the lowest, so the choice does
+// not change with map iteration order.
+func headerEntry(h map[string][]string, name string) (key, value string) {
+	if v, ok := h[name]; ok {
+		if len(v) > 0 {
+			value = v[0]
+		}
+		return name, value
+	}
+	for k, v := range h {
+		if strings.EqualFold(k, name) && (key == "" || k < key) {
+			key, value = k, ""
+			if len(v) > 0 {
+				value = v[0]
+			}
+		}
+	}
+	return key, value
+}
+
+// serializeOrigin returns the origin of u the way an Origin header carries
+// it, scheme and host with the port only when it is not the scheme's default,
+// or "" when u is not an http or https URL.
+func serializeOrigin(u string) string {
+	scheme, host, port := parseOrigin(u)
+	if (scheme != "http" && scheme != "https") || host == "" {
+		return ""
+	}
+	if strings.Contains(host, ":") { // IPv6 literal needs brackets
+		host = "[" + host + "]"
+	}
+	origin := scheme + "://" + host
+	if !((scheme == "https" && port == "443") || (scheme == "http" && port == "80")) {
+		origin += ":" + port
+	}
+	return origin
+}
+
+// isHTTPS reports whether u, a URL or a serialized origin, is https.
+func isHTTPS(u string) bool {
+	scheme, _, _ := parseOrigin(u)
+	return scheme == "https"
 }
 
 // resolveURL resolves a possibly relative URL against a base URL (RFC 3986)

@@ -31,6 +31,7 @@ type hopRecord struct {
 	headers          []string
 	allHeaders       []string          // including host/connection, for tests that assert on those
 	pairs            []string          // "name: value" in wire order, for tests that assert on repeated names
+	rawPairs         []string          // "Name: value" in wire order with the name as spelled, for tests that assert on casing
 	values           map[string]string // lowercased name -> value, for tests that assert content
 	body             []byte
 }
@@ -91,8 +92,9 @@ func (s *bodyCapture) serve(conn net.Conn) {
 		if !ok {
 			continue
 		}
-		name = strings.ToLower(strings.TrimSpace(name))
 		value = strings.TrimSpace(value)
+		rec.rawPairs = append(rec.rawPairs, strings.TrimSpace(name)+": "+value)
+		name = strings.ToLower(strings.TrimSpace(name))
 		switch name {
 		case "content-length":
 			rec.contentLength = value

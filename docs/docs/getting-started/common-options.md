@@ -147,6 +147,28 @@ It suppresses the header entirely rather than just skipping the synthesis: a
 `Referer` you set on the original request is dropped too, since it names the
 pre-redirect URL and forwarding it would hand that to the new host.
 
+### The Origin on a redirect hop
+
+Each hop gets the `Origin` a browser sends there, worked out again rather than
+copied. The rule follows the `Sec-Fetch-Mode` the first request went out with,
+whether you set it or the library inferred it from the request's shape:
+
+- A `fetch()`-style request (`cors`) gains `Origin` once the chain reaches
+  another origin, whatever its method, and before that sends it only on a
+  method other than GET or HEAD.
+- A navigation, iframe or no-cors request sends `Origin` only on a method other
+  than GET or HEAD, so its GET hops carry none, the GET after a 303 included.
+- Once a hop leaves another origin for a third one, or comes back, the value is
+  `null` for the rest of the chain. Outside `cors` mode it is also `null` on a
+  hop from https to http.
+
+The value is the `Origin` you set on the first request, or else the first URL's
+origin, since a browser sends a same-origin `fetch()` GET without one. Chrome
+presets send `null` as soon as a form or no-cors POST is redirected to another
+origin with a 307 or 308, as Chrome does. The other presets keep the page's
+origin there, as Firefox does. A request sent with no `Sec-Fetch-Mode` at all,
+such as a TLS-only one, carries your `Origin` unchanged on every hop.
+
 ## Retries
 
 Retries are off by default. `WithRetry(n)` turns them on with sensible defaults. `WithRetryConfig` tunes the backoff window and the trigger status codes. The default retry-on-status set is `[429, 500, 502, 503, 504]`.
