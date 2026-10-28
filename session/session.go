@@ -562,8 +562,15 @@ func (s *Session) requestWithRedirects(ctx context.Context, req *transport.Reque
 				return resp, nil
 			}
 
-			// Resolve relative URL
-			redirectURL := resolveURL(req.URL, location)
+			// Resolve the Location against the URL that produced it. One that
+			// does not parse ends the chain here, before OnRedirect is asked
+			// and before anything is sent: Chrome and Firefox both failed the
+			// fetch for /bad%zz without a request.
+			redirectURL, perr := resolveURL(req.URL, location)
+			if perr != nil {
+				resp.Close()
+				return nil, fmt.Errorf("invalid redirect Location %q: %w", location, perr)
+			}
 
 			// Determine new method
 			newMethod := req.Method
@@ -1933,33 +1940,61 @@ func isSchemeDowngrade(from, to string) bool {
 	return fs == "https" && ts == "http"
 }
 
-// resolveURL resolves a possibly relative URL against a base URL (RFC 3986)
-func resolveURL(base, ref string) string {
-	if strings.HasPrefix(ref, "http://") || strings.HasPrefix(ref, "https://") {
-		return ref
-	}
-	baseURL, err := url.Parse(base)
+// resolveURL resolves ref against base the way Chrome and Firefox resolve a
+// redirect's Location and a page's src or href: RFC 3986 reference resolution,
+// so a relative reference keeps its query, dot segments are removed (from an
+// absolute reference too), "?q" replaces only base's query, and "//host/x"
+// takes base's scheme. A %XX escape is kept as written: /enc%3Fq=1 is a path,
+// and both browsers requested it with its %3F. The query is then
+// percent-encoded as both browsers encode it; see encodeSpecialQuery.
+//
+// A reference net/url cannot parse, such as an invalid %-escape in the path
+// (/bad%zz), is an error: both browsers sent no request for one. URL-standard
+// quirks beyond this, such as reading a backslash as a slash, are not applied.
+func resolveURL(base, ref string) (string, error) {
+	b, err := url.Parse(base)
 	if err != nil {
-		return ref
+		return "", err
 	}
-	refURL, err := url.Parse(ref)
+	u, err := b.Parse(ref)
 	if err != nil {
-		return ref
+		return "", err
 	}
-	// Fix percent-encoded query separators in Location headers.
-	// Some servers send Location: /path%3Ffoo=bar where %3F is meant as
-	// the query separator ?. Go's url.Parse decodes %3F to ? in Path but
-	// keeps RawQuery empty, causing RequestURI() to re-encode ? as %3F.
-	// Browsers treat ? as a query separator regardless of encoding, so
-	// split the path on ? when RawQuery is empty to match browser behavior.
-	if refURL.RawQuery == "" {
-		if idx := strings.IndexByte(refURL.Path, '?'); idx >= 0 {
-			refURL.RawQuery = refURL.Path[idx+1:]
-			refURL.Path = refURL.Path[:idx]
-			refURL.RawPath = ""
+	u.RawQuery = encodeSpecialQuery(u.RawQuery)
+	return u.String(), nil
+}
+
+// encodeSpecialQuery percent-encodes the bytes of an http(s) URL's query that
+// fall in the URL standard's special-query percent-encode set: C0 controls,
+// space, ", #, <, >, ' and every byte above ~. Chrome 156 and Firefox 159 both
+// encoded the query of a Location, and of a src or href, this way, and left
+// %XX escapes alone, valid or not. net/url keeps a query byte for byte, so a
+// raw space from a server would otherwise split the HTTP/1.1 request line.
+func encodeSpecialQuery(q string) string {
+	n := 0
+	for i := 0; i < len(q); i++ {
+		if inSpecialQuerySet(q[i]) {
+			n++
 		}
 	}
-	return baseURL.ResolveReference(refURL).String()
+	if n == 0 {
+		return q
+	}
+	const hex = "0123456789ABCDEF"
+	b := make([]byte, 0, len(q)+2*n)
+	for i := 0; i < len(q); i++ {
+		c := q[i]
+		if inSpecialQuerySet(c) {
+			b = append(b, '%', hex[c>>4], hex[c&15])
+		} else {
+			b = append(b, c)
+		}
+	}
+	return string(b)
+}
+
+func inSpecialQuerySet(c byte) bool {
+	return c <= ' ' || c > '~' || c == '"' || c == '#' || c == '<' || c == '>' || c == '\''
 }
 
 // ==================== Session Persistence ====================

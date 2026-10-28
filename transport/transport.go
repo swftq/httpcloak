@@ -324,8 +324,9 @@ type Request struct {
 	// that keeps Authorization from following a hop off-origin.
 	//
 	// Not called for a 3xx with no Location (there is no hop to veto), nor for
-	// the hop that would exceed the redirect cap, nor from the streaming path,
-	// which does not follow redirects at all. It runs on the calling goroutine
+	// one whose Location does not parse (the request fails), nor for the hop
+	// that would exceed the redirect cap, nor from the streaming path, which
+	// does not follow redirects at all. It runs on the calling goroutine
 	// between hops, so it must not block and must not re-enter the same session.
 	//
 	// Session-layer concept; the transport itself does not consult this field.
