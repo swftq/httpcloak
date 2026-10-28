@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **The Chrome 155 presets send Chrome's real build in `sec-ch-ua-full-version-list`**: every Chrome preset derived the list from `sec-ch-ua` as `"Google Chrome";v="155.0.0.0"`, and Chrome always sends its real build there; only the User-Agent is reduced to `.0.0.0`. The desktop 155 presets, and `chrome-latest` on them, now send `155.0.8059.39`, the build the 155 Accept change was measured on. Android was not measured and keeps the derived list, as do the older versions. A pinned list is used only while its brands and major versions match `sec-ch-ua`, so a custom preset that moves `sec-ch-ua` with `based_on` gets a derived list rather than the old build beside the new major. `Describe` now writes out a preset's pinned client hints, which it used to drop.
+
 ## [1.7.3] - 2026-10-14
 
 ### Added
