@@ -332,6 +332,8 @@ resource type.
 |---|---|---|
 | `hpack_representation` | object | Per-header-name override of the HPACK representation: `"incremental"`, `"without"`, `"never"` or `"default"`. Deltas only; browser profiles leave it empty. |
 | `data_frame_max_size` | uint32 | Caps the DATA frame payload this profile sends. Omitted derives it from the client family: 16375 for Chrome, the peer's advertised size otherwise. Chrome's cap exists so header plus payload occupy exactly one TLS record. |
+| `stream_window_update` | uint32 | A `WINDOW_UPDATE` increment sent on every new stream straight after its HEADERS, in the same write and before any DATA. It raises the stream's window above `initial_window_size`. Omitted or `0` sends none, as Chrome and Safari do. Firefox advertises 131072 and sends 12451840, which makes 12 MiB. `initial_window_size` plus this must stay within 2^31-1. `describe` writes it only when it is set. |
+| `first_stream_id` | uint32 | The ID of a connection's first stream; later ones count up by two. It must be odd. Omitted or `0` means 1, where Chrome and Safari start. Firefox starts at 3, keeping 1 for an HTTP/1.1 Upgrade. `describe` writes it only when it is not 1. |
 | `preface_ping_idle_ms` | uint32 | When a connection has been idle this long, the next request on it carries a PING alongside. Omitted or `0` sends none. Chrome uses `10000`. |
 | `preface_ping_hang_ms` | uint32 | The companion hang interval. |
 | `idle_ping_ms` | uint32 | Enables a periodic health-check PING, which no browser sends. Omitted or `0` means off, which is what a browser profile wants. |

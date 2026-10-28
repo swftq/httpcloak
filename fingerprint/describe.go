@@ -245,6 +245,16 @@ func flattenHTTP2(p *Preset) *HTTP2Spec {
 	out.MaxHeaderListSize = &maxHeaderList
 	connWindow := s.ConnectionWindowUpdate
 	out.ConnectionWindowUpdate = &connWindow
+	// Only where a preset departs from the default, so one that opens its
+	// streams the usual way describes exactly as it did before. Both defaults
+	// are fixed rather than derived, which is what makes leaving them out
+	// round-trip safe.
+	if inc := p.H2StreamWindowUpdate(); inc != 0 {
+		out.StreamWindowUpdate = &inc
+	}
+	if id := p.H2FirstStreamID(); id != 1 {
+		out.FirstStreamID = &id
+	}
 	streamWeight := s.StreamWeight
 	out.StreamWeight = &streamWeight
 	streamExcl := s.StreamExclusive

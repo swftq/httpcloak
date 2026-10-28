@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Firefox opens its HTTP/2 streams the way Firefox does**: the Firefox presets started a connection at stream 1, like every other client, and opened each stream at the 131072-byte window they advertise. Firefox starts at stream 3, keeping 1 for an HTTP/1.1 Upgrade. It follows every HEADERS with a `WINDOW_UPDATE` of 12451840 on that stream, which takes the stream to 12 MiB, and sends it in the same write and before any request body. A Firefox 159 capture did both on all 106 requests over 9 connections, and the Firefox 133 and 148 sources carry the same code and values. The Firefox presets now do both, and the client counts that credit, so a large response arrives without a window refresh every 64 KB. JSON presets gain `first_stream_id` and `stream_window_update` for it, and `describe` writes them only where they are set. Chrome and Safari start at 1 and send no such update, so their presets are byte-for-byte unchanged. Needs the `sardanioss/net` release that adds `Transport.FirstStreamID` and `Transport.StreamWindowUpdate`.
+
 ## [1.7.3] - 2026-10-14
 
 ### Added

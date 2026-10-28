@@ -99,6 +99,8 @@ func Transport(o Options) *http2.Transport {
 		PrefacePingHang: p.H2PrefacePingHang(),
 
 		ConnectionFlow:     s.ConnectionWindowUpdate,
+		StreamWindowUpdate: p.H2StreamWindowUpdate(),
+		FirstStreamID:      p.H2FirstStreamID(),
 		Settings:           Settings(s),
 		SettingsOrder:      SettingsOrder(p),
 		DisableCookieSplit: p.H2DisableCookieSplit(),

@@ -427,6 +427,20 @@ type H2FingerprintConfig struct {
 	// nil means derive it from the client family; see H2DataFrameMaxSize.
 	DataFrameMaxSize *uint32
 
+	// FirstStreamID is the ID of the first stream a connection opens; later
+	// streams count up from it by two. Zero means 1, where Chromium and WebKit
+	// start. Firefox starts at 3 and keeps 1 for an HTTP/1.1 Upgrade
+	// (Http2Session.cpp, mNextStreamID). It must be odd.
+	FirstStreamID uint32
+
+	// StreamWindowUpdate is the increment of a WINDOW_UPDATE sent on every new
+	// stream straight after its HEADERS. Zero sends none, which is what
+	// Chromium and WebKit do. Firefox advertises its push allowance, 131072, as
+	// the initial window, then opens each stream it starts to 12 MiB with
+	// 12451840 (Http2StreamBase::AdjustInitialWindow). InitialWindowSize plus
+	// this must stay within 2^31-1.
+	StreamWindowUpdate uint32
+
 	// HPACKRepresentation pins the HPACK representation of individual header
 	// names: "incremental", "without", "never", or "default". It is an OVERRIDE
 	// LAYER, expected to be empty for a browser profile whose base policy is
@@ -767,6 +781,24 @@ func (p *Preset) H2DataFrameMaxSize() uint32 {
 	}
 	if p.ClientHelloID.Client == "Chrome" {
 		return 16375
+	}
+	return 0
+}
+
+// H2FirstStreamID is the ID of a connection's first stream: 1 unless the
+// preset names another, which only the Firefox presets do.
+func (p *Preset) H2FirstStreamID() uint32 {
+	if p.H2Config != nil && p.H2Config.FirstStreamID != 0 {
+		return p.H2Config.FirstStreamID
+	}
+	return 1
+}
+
+// H2StreamWindowUpdate is the WINDOW_UPDATE increment sent on each new stream
+// after its HEADERS, or 0 for none.
+func (p *Preset) H2StreamWindowUpdate() uint32 {
+	if p.H2Config != nil {
+		return p.H2Config.StreamWindowUpdate
 	}
 	return 0
 }
@@ -1251,6 +1283,13 @@ func firefoxH2Config() *H2FingerprintConfig {
 		PseudoHeaderOrder:   []string{":method", ":path", ":authority", ":scheme"},
 		PriorityTable:       firefoxPriorityTable(),
 		PriorityModel:       PriorityModelTable,
+
+		// Streams from 3, each raised from the 131072 in SETTINGS to the 12
+		// MiB pull allowance straight after its HEADERS. The 133.0, 148.0 and
+		// 159.0 release sources agree, and a 159.0 capture did both on all
+		// 106 requests over 9 connections.
+		FirstStreamID:      3,
+		StreamWindowUpdate: 12451840,
 	}
 }
 
