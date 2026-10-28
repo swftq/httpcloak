@@ -207,6 +207,13 @@ body "{\"k\":1}"
       "no_rfc7540_priorities": false,
       "stream_window_update": 12451840,
       "first_stream_id": 3,
+      "window_refresh": {
+        "credit_on": "arrival",
+        "ack_at": 4194304,
+        "floor": 98304,
+        "interval_ms": 0,
+        "read_buffer": 786432
+      },
       "settings_order": [
         1,
         2,

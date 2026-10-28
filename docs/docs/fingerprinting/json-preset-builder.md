@@ -236,6 +236,7 @@ Worth noting:
 - `tls.client_hello` says `chrome-146-windows`. That's the underlying utls ClientHelloID we use. Every later Chrome desktop preset builds on it, and the TLS changes since then sit on top as plain JSON fields: `signature_algorithms` (from 150), and `trust_anchors` (from 152, sorted from 154). Most versions in between only moved the User-Agent and sec-ch-ua values.
 - Every H2 SETTINGS value shows up, even the zero ones (`max_concurrent_streams: 0`, `max_frame_size: 0`). Zero means "don't emit this SETTINGS entry on the wire", and that information survives the round-trip.
 - `first_stream_id` and `stream_window_update` show up only on presets that set them, which today means the Firefox presets. Their defaults (1, and no update) are fixed rather than derived, so leaving them out still round-trips.
+- `window_refresh` shows up only on presets that set a rule, again only the Firefox presets. When it does, all five keys are written, so Firefox's missing timer reads as `"interval_ms": 0`.
 - The full RFC 7540 priority table lands under `http2.priority_table`. Chrome 147+ ships its real per-Sec-Fetch-Dest urgencies. Presets that opt out (Safari, iOS Chrome, iOS Safari) skip this block.
 
 For the full schema with every field documented, see the [JSON Preset Spec](../reference/json-preset-spec).
