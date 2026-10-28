@@ -255,6 +255,11 @@ type HeaderSpec struct {
 	// Accept in Order, but image requests are built elsewhere and need their
 	// own value, which moves between Chrome versions (155 added image/jxl).
 	ImageAccept string `json:"image_accept,omitempty"`
+
+	// FullEncodingOverHTTP says where the preset's Accept-Encoding still goes
+	// over plain HTTP: "loopback", "never" or "always"; see
+	// Preset.FullEncodingOverHTTP. Omitted derives it from the User-Agent.
+	FullEncodingOverHTTP string `json:"full_encoding_over_http,omitempty"`
 }
 
 // HeaderPairSpec is a key-value pair for ordered headers in JSON.
@@ -1257,6 +1262,9 @@ func applyHeaders(p *Preset, spec *HeaderSpec) {
 	if spec.ImageAccept != "" {
 		p.ImageAccept = spec.ImageAccept
 	}
+	if spec.FullEncodingOverHTTP != "" {
+		p.FullEncodingOverHTTP = spec.FullEncodingOverHTTP
+	}
 
 	// Merge values into Headers map
 	if len(spec.Values) > 0 {
@@ -1535,6 +1543,14 @@ func validatePreset(p *Preset, spec *PresetSpec) error {
 			default:
 				return fmt.Errorf("invalid quic_transport_param_order: %q (must be chrome/random)", *spec.HTTP3.QUICTransportParamOrder)
 			}
+		}
+	}
+
+	if spec.Headers != nil && spec.Headers.FullEncodingOverHTTP != "" {
+		switch spec.Headers.FullEncodingOverHTTP {
+		case FullEncodingLoopback, FullEncodingNever, FullEncodingAlways:
+		default:
+			return fmt.Errorf("invalid full_encoding_over_http: %q (must be loopback/never/always)", spec.Headers.FullEncodingOverHTTP)
 		}
 	}
 

@@ -381,7 +381,8 @@ DATA len=7
           "key": "accept-encoding",
           "value": "gzip, deflate, br, zstd"
         }
-      ]
+      ],
+      "full_encoding_over_http": "never"
     },
     "protocols": {
       "http3": true

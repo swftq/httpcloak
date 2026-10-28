@@ -381,7 +381,8 @@ DATA len=7
           "key": "sec-fetch-user",
           "value": "?1"
         }
-      ]
+      ],
+      "full_encoding_over_http": "never"
     },
     "protocols": {
       "http3": true

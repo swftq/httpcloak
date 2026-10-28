@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Plain `http://` requests send the `Accept-Encoding` browsers send there**: the session sent each preset's TLS list over plain HTTP, `br` and `zstd` included, to every host. Chrome 156 and Firefox 159 offer those over plain HTTP only to a loopback host (`localhost`, a name under `.localhost`, `127.0.0.0/8` or `::1`) and send `gzip, deflate` to any other; Safari 26.3 sends `gzip, deflate` on every plain-HTTP request, localhost included. Measured with each browser loading a page from a LAN address that pulled every resource type from itself and from localhost, and read in Chromium's `SetAcceptEncodingIfMissing` and Firefox's `network.http.accept-encoding` prefs. The rule follows each request's own URL, so every hop of a redirect chain gets its own. The Safari 17 and 18 and iOS Chrome presets take Safari's rule, as they run on the same network stack; no plain-HTTP capture of them exists. A custom preset sets the rule with `headers.full_encoding_over_http` (`loopback`, `never` or `always`); omitted, it is derived from the User-Agent, and `describe` writes it out. A caller's own `Accept-Encoding` still wins. The `client` package sends only https:// requests and is unchanged.
+
 ## [1.7.3] - 2026-10-14
 
 ### Added

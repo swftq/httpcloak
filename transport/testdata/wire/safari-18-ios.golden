@@ -381,7 +381,8 @@ DATA len=7
           "key": "user-agent",
           "value": ""
         }
-      ]
+      ],
+      "full_encoding_over_http": "never"
     },
     "protocols": {
       "http3": true
