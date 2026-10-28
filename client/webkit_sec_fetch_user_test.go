@@ -15,9 +15,9 @@ import (
 
 // WebKit sends no Sec-Fetch-User (see TestWebKitPresetsSendNoSecFetchUser in
 // the transport package for the evidence), and the client set ?1 on every
-// navigation whatever the preset. Prepare starts from the preset's header map
-// before the navigation headers go on, so it is checked as well. The header set
-// is built before the protocol is chosen, so one protocol covers it.
+// navigation whatever the preset. The header set is built before the protocol
+// is chosen, so one protocol covers it. PreparedRequest.Send goes through Do,
+// so this covers it too.
 func TestClientWebKitPresetsSendNoSecFetchUser(t *testing.T) {
 	ln := priorityTLSListener(t, "http/1.1")
 	got := make(chan map[string]string, 16)
@@ -55,25 +55,14 @@ func TestClientWebKitPresetsSendNoSecFetchUser(t *testing.T) {
 	}()
 	url := "https://" + ln.Addr().String() + "/"
 
-	// navigate sends a navigation through Do, or through Prepare and Send, and
-	// returns the headers the server read.
-	navigate := func(preset string, prepared bool) map[string]string {
+	// navigate sends a navigation and returns the headers the server read.
+	navigate := func(preset string) map[string]string {
 		t.Helper()
 		c := NewClient(preset, WithForceHTTP1(), WithInsecureSkipVerify())
 		defer c.Close()
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		req := &Request{Method: "GET", URL: url}
-		var err error
-		if prepared {
-			var p *PreparedRequest
-			if p, err = c.Prepare(ctx, req); err == nil {
-				_, err = p.Send(ctx)
-			}
-		} else {
-			_, err = c.Do(ctx, req)
-		}
-		if err != nil {
+		if _, err := c.Do(ctx, &Request{Method: "GET", URL: url}); err != nil {
 			t.Fatalf("%s: %v", preset, err)
 		}
 		return <-got
@@ -92,25 +81,19 @@ func TestClientWebKitPresetsSendNoSecFetchUser(t *testing.T) {
 			t.Fatalf("%s is not among the WebKit presets %v", want, webkit)
 		}
 	}
-	for _, prepared := range []bool{false, true} {
-		path := "Do"
-		if prepared {
-			path = "Prepare"
+	for _, preset := range webkit {
+		h := navigate(preset)
+		if v, ok := h["sec-fetch-user"]; ok {
+			t.Errorf("%s: sec-fetch-user %q on a navigation; WebKit sends none", preset, v)
 		}
-		for _, preset := range webkit {
-			h := navigate(preset, prepared)
-			if v, ok := h["sec-fetch-user"]; ok {
-				t.Errorf("%s through %s: sec-fetch-user %q on a navigation; WebKit sends none", preset, path, v)
-			}
-			if h["sec-fetch-mode"] != "navigate" || h["sec-fetch-dest"] != "document" {
-				t.Errorf("%s through %s: no longer a navigation: %v", preset, path, h)
-			}
+		if h["sec-fetch-mode"] != "navigate" || h["sec-fetch-dest"] != "document" {
+			t.Errorf("%s: no longer a navigation: %v", preset, h)
 		}
-		// Chromium and Gecko do send it, on a navigation a person started.
-		for _, preset := range []string{"chrome-latest", "firefox-latest"} {
-			if v := navigate(preset, prepared)["sec-fetch-user"]; v != "?1" {
-				t.Errorf("%s through %s: sec-fetch-user %q, want ?1", preset, path, v)
-			}
+	}
+	// Chromium and Gecko do send it, on a navigation a person started.
+	for _, preset := range []string{"chrome-latest", "firefox-latest"} {
+		if v := navigate(preset)["sec-fetch-user"]; v != "?1" {
+			t.Errorf("%s: sec-fetch-user %q, want ?1", preset, v)
 		}
 	}
 }
