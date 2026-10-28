@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **A cookie deleted with `Max-Age=0` is now deleted**: the jar in `client.Client` read `Max-Age=0` as no Max-Age at all, so `Set-Cookie: sid=; Max-Age=0` replaced the cookie with an empty one instead of removing it, and the next request sent `Cookie: sid=`. The session's jar ignored Max-Age altogether: a cookie deleted with `Max-Age=0` or a negative value was sent again, a cookie with a positive Max-Age never expired, and a Max-Age gave way to an `Expires` date in the past. Both jars now read Max-Age as Chrome and Firefox do: 0 or less deletes the cookie, a positive value sets its lifetime, and either way it takes precedence over `Expires`. With several Max-Age attributes the last one decides, and an invalid one counts as none. In `client.Client`, a Max-Age too large to hold also wrapped around and could delete the cookie at once: `Max-Age=10000000000` did, and so did anything above 2147483647 on 32-bit builds. Such a cookie is now kept for as long as the jar can represent, as both browsers keep it. `client.ParseSetCookie` now reports a Max-Age of 0 or less as `MaxAge` -1, as `net/http` does, since 0 means none. The root package's `Client` and `Session` get the same fix.
+
 ## [1.7.3] - 2026-10-14
 
 ### Added

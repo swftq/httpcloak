@@ -855,7 +855,17 @@ func (s *Session) extractCookies(headers map[string][]string, requestURL string)
 					cookie.Expires = &t
 				}
 			case "max-age":
-				cookie.MaxAge = parseIntSimple(attrValue)
+				// RFC 6265 Section 5.2.2: a Max-Age of 0 or less expires the
+				// cookie, and MaxAge 0 means none, so it is stored as -1. As
+				// in Chrome and Firefox, the last Max-Age decides, and an
+				// invalid one leaves none.
+				maxAge, ok := parseIntSimple(attrValue)
+				if !ok {
+					maxAge = 0
+				} else if maxAge <= 0 {
+					maxAge = -1
+				}
+				cookie.MaxAge = maxAge
 			case "samesite":
 				// Normalize to capitalized form
 				sameSiteLower := toLowerASCII(attrValue)
@@ -870,6 +880,21 @@ func (s *Session) extractCookies(headers map[string][]string, requestURL string)
 					cookie.SameSite = attrValue
 				}
 			}
+		}
+
+		// Max-Age takes precedence over Expires (RFC 6265 Section 5.3). The
+		// jar checks only Expires, so Max-Age becomes one here.
+		if cookie.MaxAge != 0 {
+			expires := time.Unix(0, 0)
+			if cookie.MaxAge > 0 {
+				// A Max-Age longer than a time.Duration can hold gets the longest one
+				lifetime := time.Duration(1<<63 - 1)
+				if int64(cookie.MaxAge) < int64(lifetime/time.Second) {
+					lifetime = time.Duration(cookie.MaxAge) * time.Second
+				}
+				expires = time.Now().Add(lifetime)
+			}
+			cookie.Expires = &expires
 		}
 
 		// Use CookieJar to store with proper domain scoping
@@ -895,8 +920,11 @@ func splitBySemicolon(s string) []string {
 	return result
 }
 
-// parseIntSimple parses an integer from a string, returns 0 on error
-func parseIntSimple(s string) int {
+// parseIntSimple parses a decimal integer with an optional leading "-". ok is
+// false for anything else, such as "", "-", "+1" or "1abc". A value too large
+// for an int stops at the largest one, so that it cannot wrap around
+func parseIntSimple(s string) (int, bool) {
+	const maxInt = int(^uint(0) >> 1)
 	result := 0
 	negative := false
 	start := 0
@@ -904,17 +932,23 @@ func parseIntSimple(s string) int {
 		negative = true
 		start = 1
 	}
+	if start == len(s) {
+		return 0, false
+	}
 	for i := start; i < len(s); i++ {
-		if s[i] >= '0' && s[i] <= '9' {
-			result = result*10 + int(s[i]-'0')
+		if s[i] < '0' || s[i] > '9' {
+			return 0, false
+		}
+		if d := int(s[i] - '0'); result <= (maxInt-d)/10 {
+			result = result*10 + d
 		} else {
-			break
+			result = maxInt
 		}
 	}
 	if negative {
 		result = -result
 	}
-	return result
+	return result, true
 }
 
 // parseHTTPDate parses an HTTP date string (RFC1123 format)
