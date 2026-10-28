@@ -11,6 +11,7 @@ package h2build
 import (
 	"strconv"
 	"strings"
+	"time"
 
 	http "github.com/sardanioss/http"
 	"github.com/sardanioss/httpcloak/fingerprint"
@@ -101,6 +102,7 @@ func Transport(o Options) *http2.Transport {
 		ConnectionFlow:     s.ConnectionWindowUpdate,
 		StreamWindowUpdate: p.H2StreamWindowUpdate(),
 		FirstStreamID:      p.H2FirstStreamID(),
+		WindowRefresh:      WindowRefresh(p),
 		Settings:           Settings(s),
 		SettingsOrder:      SettingsOrder(p),
 		DisableCookieSplit: p.H2DisableCookieSplit(),
@@ -241,6 +243,22 @@ func SettingsOrder(p *fingerprint.Preset) []http2.SettingID {
 		out = append(out, http2.SettingNoRFC7540Priorities)
 	}
 	return out
+}
+
+// WindowRefresh converts the preset's refresh rule to the fork's, or nil for
+// the fork's default, Chromium's.
+func WindowRefresh(p *fingerprint.Preset) *http2.WindowRefresh {
+	r := p.H2WindowRefresh()
+	if r == nil {
+		return nil
+	}
+	return &http2.WindowRefresh{
+		OnArrival:  r.CreditOn == fingerprint.CreditOnArrival,
+		AckAt:      r.AckAt,
+		Floor:      r.Floor,
+		Interval:   time.Duration(r.IntervalMs) * time.Millisecond,
+		ReadBuffer: r.ReadBuffer,
+	}
 }
 
 // StreamPriorityMode converts the preset's string to the fork's constant.

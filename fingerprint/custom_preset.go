@@ -152,6 +152,9 @@ type HTTP2Spec struct {
 	// FirstStreamID is the ID of a connection's first stream, which must be
 	// odd. Omitted or 0 means 1. Firefox starts at 3.
 	FirstStreamID *uint32 `json:"first_stream_id,omitempty"`
+	// WindowRefresh is when receive credit goes back to the peer; see
+	// H2WindowRefresh. Omitted keeps the transport's default, Chromium's.
+	WindowRefresh *WindowRefreshSpec `json:"window_refresh,omitempty"`
 
 	// H2 fingerprinting config
 	Settings      []HTTP2SettingSpec `json:"settings,omitempty"`
@@ -215,6 +218,17 @@ type ResourcePrioritySpec struct {
 	Incremental bool   `json:"incremental"`
 	EmitHeader  bool   `json:"emit_header"`
 	Weight      uint16 `json:"weight,omitempty"` // 1-256; omitted = from the urgency
+}
+
+// WindowRefreshSpec is the JSON shape of fingerprint.H2WindowRefresh. A key
+// left out of the object is zero, so an object that names only ack_at has no
+// timer.
+type WindowRefreshSpec struct {
+	CreditOn   string `json:"credit_on"` // "read" (or "") or "arrival"
+	AckAt      uint32 `json:"ack_at"`    // 0 = more than half the window
+	Floor      uint32 `json:"floor"`     // 0 = none
+	IntervalMs uint32 `json:"interval_ms"`
+	ReadBuffer uint32 `json:"read_buffer"` // "arrival" only
 }
 
 // HTTP2SettingSpec represents a single HTTP/2 SETTINGS frame entry.
@@ -557,6 +571,10 @@ func clonePreset(src *Preset) *Preset {
 		if src.H2Config.DisableCookieSplit != nil {
 			v := *src.H2Config.DisableCookieSplit
 			h2.DisableCookieSplit = &v
+		}
+		if src.H2Config.WindowRefresh != nil {
+			v := *src.H2Config.WindowRefresh
+			h2.WindowRefresh = &v
 		}
 		if src.H2Config.PriorityTable != nil {
 			h2.PriorityTable = make(map[string]ResourcePriority, len(src.H2Config.PriorityTable))
@@ -1099,7 +1117,8 @@ func applyHTTP2(p *Preset, spec *HTTP2Spec) error {
 		spec.DataFrameMaxSize != nil || spec.PrefacePingIdleMs != nil ||
 		spec.PrefacePingHangMs != nil || spec.IdlePingMs != nil ||
 		spec.PriorityModel != nil || spec.PriorityOverHTTP1 != nil ||
-		spec.FirstStreamID != nil || spec.StreamWindowUpdate != nil {
+		spec.FirstStreamID != nil || spec.StreamWindowUpdate != nil ||
+		spec.WindowRefresh != nil {
 		if p.H2Config == nil {
 			p.H2Config = &H2FingerprintConfig{}
 		}
@@ -1144,6 +1163,15 @@ func applyHTTP2(p *Preset, spec *HTTP2Spec) error {
 		if spec.DataFrameMaxSize != nil {
 			v := *spec.DataFrameMaxSize
 			p.H2Config.DataFrameMaxSize = &v
+		}
+		if r := spec.WindowRefresh; r != nil {
+			p.H2Config.WindowRefresh = &H2WindowRefresh{
+				CreditOn:   r.CreditOn,
+				AckAt:      r.AckAt,
+				Floor:      r.Floor,
+				IntervalMs: r.IntervalMs,
+				ReadBuffer: r.ReadBuffer,
+			}
 		}
 		if spec.FirstStreamID != nil {
 			p.H2Config.FirstStreamID = *spec.FirstStreamID
@@ -1549,6 +1577,30 @@ func validatePreset(p *Preset, spec *PresetSpec) error {
 		if w := uint64(p.HTTP2Settings.InitialWindowSize) + uint64(p.H2StreamWindowUpdate()); w > math.MaxInt32 {
 			return fmt.Errorf("initial_window_size %d plus stream_window_update %d is %d, past the 2^31-1 a window may reach",
 				p.HTTP2Settings.InitialWindowSize, p.H2StreamWindowUpdate(), w)
+		}
+		if r := p.H2WindowRefresh(); r != nil {
+			switch r.CreditOn {
+			case "", CreditOnRead, CreditOnArrival:
+			default:
+				return fmt.Errorf("invalid window_refresh.credit_on: %q (must be read/arrival)", r.CreditOn)
+			}
+			for _, v := range []struct {
+				name string
+				n    uint32
+			}{{"ack_at", r.AckAt}, {"floor", r.Floor}, {"read_buffer", r.ReadBuffer}} {
+				if v.n > math.MaxInt32 {
+					return fmt.Errorf("window_refresh.%s %d is past 2^31-1", v.name, v.n)
+				}
+			}
+			if r.ReadBuffer != 0 && r.CreditOn != CreditOnArrival {
+				return fmt.Errorf("window_refresh.read_buffer %d applies only with credit_on %q", r.ReadBuffer, CreditOnArrival)
+			}
+			// A rule measures the connection's window from this, so it has to
+			// be a window the peer could hold.
+			if w := uint64(p.HTTP2Settings.ConnectionWindowUpdate) + 65535; w > math.MaxInt32 {
+				return fmt.Errorf("connection_window_update %d plus the initial 65535 is %d, past the 2^31-1 a window may reach",
+					p.HTTP2Settings.ConnectionWindowUpdate, w)
+			}
 		}
 	}
 

@@ -334,11 +334,38 @@ resource type.
 | `data_frame_max_size` | uint32 | Caps the DATA frame payload this profile sends. Omitted derives it from the client family: 16375 for Chrome, the peer's advertised size otherwise. Chrome's cap exists so header plus payload occupy exactly one TLS record. |
 | `stream_window_update` | uint32 | A `WINDOW_UPDATE` increment sent on every new stream straight after its HEADERS, in the same write and before any DATA. It raises the stream's window above `initial_window_size`. Omitted or `0` sends none, as Chrome and Safari do. Firefox advertises 131072 and sends 12451840, which makes 12 MiB. `initial_window_size` plus this must stay within 2^31-1. `describe` writes it only when it is set. |
 | `first_stream_id` | uint32 | The ID of a connection's first stream; later ones count up by two. It must be odd. Omitted or `0` means 1, where Chrome and Safari start. Firefox starts at 3, keeping 1 for an HTTP/1.1 Upgrade. `describe` writes it only when it is not 1. |
+| `window_refresh` | object | When receive credit goes back to the server in `WINDOW_UPDATE` frames, at the connection and at each stream. Omitted keeps the default, Chrome's rule. Under it, bytes count once they have been read, and credit goes back once more than half the window is waiting or five seconds after the last update. See [`window_refresh`](#window_refresh). `describe` writes it only when it is set. |
 | `preface_ping_idle_ms` | uint32 | When a connection has been idle this long, the next request on it carries a PING alongside. Omitted or `0` sends none. Chrome uses `10000`. |
 | `preface_ping_hang_ms` | uint32 | The companion hang interval. |
 | `idle_ping_ms` | uint32 | Enables a periodic health-check PING, which no browser sends. Omitted or `0` means off, which is what a browser profile wants. |
 | `priority_model` | string | `"chromium"` or `"table"`. On `chromium` a request's own `priority` header picks its weight and each new stream chains onto the newest open stream at the same or a higher priority, as Chrome does. On `table` the weight always comes from the table and every stream's parent is 0, as in Firefox. Omitted derives it from `stream_exclusive`. See [Per-Resource Priority](../fingerprinting/per-resource-priority). |
 | `priority_over_http1` | bool | Whether the priority header also goes out over HTTP/1.1. Firefox sends it there; Chrome, on every platform, does not. Omitted derives it from the model, and `describe` always writes it out. |
+
+### `window_refresh`
+
+```json
+"window_refresh": {
+  "credit_on":   "arrival",
+  "ack_at":      4194304,
+  "floor":       98304,
+  "interval_ms": 0,
+  "read_buffer": 786432
+}
+```
+
+That is Firefox's rule, which every Firefox preset carries. Firefox 133, 148 and 159 have the same code (`Http2Session::UpdateLocalStreamWindow` and `UpdateLocalSessionWindow`). Replayed against Firefox 159's own bookkeeping from three 20 MiB transfers, the rule sends every one of Firefox's updates at the same point and size.
+
+| Key | Type | Meaning |
+|---|---|---|
+| `credit_on` | string | When received bytes count. `"read"` (or omitted) counts them once the response body has been read, as Chrome does. `"arrival"` counts them as each DATA frame arrives, as Firefox does. With `"arrival"`, the connection hands back everything it receives, and a stream holds back what the reader has left unread past `read_buffer`. The frame that ends a stream counts for the connection only. When both are due on one frame, the stream's update goes first, in the same write. |
+| `ack_at` | uint32 | Hand credit back once this many bytes are waiting. `0` means once more than half the window is. Firefox uses 4194304. |
+| `floor` | uint32 | Also hand credit back once the window the server has left is down to this many bytes, however few are waiting. `0` means no floor. Firefox uses 98304. |
+| `interval_ms` | uint32 | Also hand credit back this long after the last update, checked as bytes are counted. `0` means never. Chrome uses 5000; Firefox has no timer. |
+| `read_buffer` | uint32 | With `"arrival"` only: how many unread bytes a stream may hold and still hand back. Firefox uses 786432, the pipe between a stream and its consumer. `0` holds back every unread byte. |
+
+- **Missing keys.** A key left out of the object is zero, so a rule that names only `ack_at` has no timer. A preset based on one that sets a rule can get Chrome's rule back by giving Chrome's values, `ack_at` 0 and `interval_ms` 5000. Its connection window still comes from `connection_window_update`, as with any rule.
+- **The connection window.** Setting `window_refresh` also measures the connection's window from `connection_window_update`, plus the initial 65535, which is what the server was given. Without it, the transport keeps assuming 15663105 + 65535 whatever `connection_window_update` says. So the connection refreshes after more than 7864320 bytes on every preset that sets no rule.
+- **Limits.** `ack_at`, `floor` and `read_buffer` must stay within 2^31-1, and `read_buffer` needs `"arrival"`. With a rule, `connection_window_update` plus 65535 must stay within 2^31-1 too.
 
 ### `priority_table`
 

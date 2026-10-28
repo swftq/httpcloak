@@ -441,6 +441,16 @@ type H2FingerprintConfig struct {
 	// this must stay within 2^31-1.
 	StreamWindowUpdate uint32
 
+	// WindowRefresh is when the client hands receive credit back to the peer
+	// with WINDOW_UPDATE frames, at the connection and at each stream. Nil
+	// keeps the transport's default, Chromium's rule: bytes count once the
+	// body has been read, and go back once more than half the window is
+	// waiting or five seconds after the last update. A rule also measures the
+	// connection's window from ConnectionWindowUpdate, as the peer sees it;
+	// without one it stays at the 15663105 + 65535 the transport has always
+	// assumed. Only the Firefox presets set one, firefoxH2Config's.
+	WindowRefresh *H2WindowRefresh
+
 	// HPACKRepresentation pins the HPACK representation of individual header
 	// names: "incremental", "without", "never", or "default". It is an OVERRIDE
 	// LAYER, expected to be empty for a browser profile whose base policy is
@@ -801,6 +811,50 @@ func (p *Preset) H2StreamWindowUpdate() uint32 {
 		return p.H2Config.StreamWindowUpdate
 	}
 	return 0
+}
+
+// The two ways a WindowRefresh rule counts received bytes.
+const (
+	CreditOnRead    = "read"    // once the response body has been read, as Chromium does
+	CreditOnArrival = "arrival" // as each DATA frame arrives, as Firefox does
+)
+
+// H2WindowRefresh is a rule for handing receive credit back to the peer. One
+// rule serves the connection and every stream, each against its own window.
+type H2WindowRefresh struct {
+	// CreditOn is when received bytes count: CreditOnRead (or "") or
+	// CreditOnArrival. On arrival, the connection hands back every byte it
+	// receives, whatever the reader does. A stream holds back what its reader
+	// has left unread past ReadBuffer, and the frame that ends a stream counts
+	// for the connection only. When both are due on one frame, the stream's
+	// update goes first, in the same write.
+	CreditOn string
+
+	// AckAt hands credit back once at least this many bytes are waiting. Zero
+	// means once more than half the window is.
+	AckAt uint32
+
+	// Floor also hands it back once the window the peer has left is down to
+	// this many bytes or fewer. Zero means no floor.
+	Floor uint32
+
+	// IntervalMs also hands it back this many milliseconds after the last
+	// update, checked as bytes are counted. Zero means never.
+	IntervalMs uint32
+
+	// ReadBuffer, on arrival only, is how many unread bytes a stream may hold
+	// and still hand back. Bytes past it wait for the reader. Zero holds back
+	// every unread byte.
+	ReadBuffer uint32
+}
+
+// H2WindowRefresh is the preset's rule for handing receive credit back, or
+// nil for the transport's default.
+func (p *Preset) H2WindowRefresh() *H2WindowRefresh {
+	if p.H2Config != nil {
+		return p.H2Config.WindowRefresh
+	}
+	return nil
 }
 
 // H2HPACKRepresentation returns the per-name representation overrides, or nil
@@ -1290,6 +1344,23 @@ func firefoxH2Config() *H2FingerprintConfig {
 		// 106 requests over 9 connections.
 		FirstStreamID:      3,
 		StreamWindowUpdate: 12451840,
+
+		// Firefox's refresh rule, the same in the 133.0, 148.0 and 159.0
+		// sources (Http2Session::UpdateLocalStreamWindow and
+		// UpdateLocalSessionWindow). It counts each DATA frame as it
+		// arrives and hands credit back once kMinimumToAck, 4 MiB, is
+		// waiting, or once the window is down to kEmergencyWindowThreshold,
+		// 96 KiB. It has no timer. A stream holds back what its consumer has
+		// not taken beyond the 786432-byte response pipe. Replayed against
+		// the bookkeeping Firefox 159.0 logged over three 20 MiB captures,
+		// this rule sends every one of Firefox's updates at the same point
+		// and size.
+		WindowRefresh: &H2WindowRefresh{
+			CreditOn:   CreditOnArrival,
+			AckAt:      4194304,
+			Floor:      98304,
+			ReadBuffer: 786432,
+		},
 	}
 }
 

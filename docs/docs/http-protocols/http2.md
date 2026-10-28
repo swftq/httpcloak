@@ -19,6 +19,7 @@ The transport is a custom `http2.ClientConn` from the `sardanioss/net` fork. Sam
 - Per-preset SETTINGS frame values (initial window size, max frame size, max concurrent streams, header table size, enable push, max header list size).
 - Configurable initial WINDOW_UPDATE on the connection. Real Chrome bumps this right after SETTINGS.
 - The stream ID a connection starts at, and a WINDOW_UPDATE on each new stream right after its HEADERS. Firefox does both: it opens streams from 3 and raises each one from the 131072 it advertises to 12 MiB. Chrome and Safari start at 1 and send no such update.
+- When receive credit goes back to the server. Chrome hands a window back once more than half of it has been read, or five seconds after its last update. Firefox counts data as it arrives and hands credit back once 4 MiB is waiting or 96 KiB of window is left, with no timer. With a reader that keeps up, that is one stream update and one connection update every 4 MiB, the stream's first.
 - RFC 7540 stream priority weight and dependency tree per request.
 - RFC 9218 priority headers (`priority: u=N, i`) per request, with per-resource-type values driven by the preset's priority table.
 - Pseudo-header order matching the preset.
