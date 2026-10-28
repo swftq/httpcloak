@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- **`client.Client` no longer sends the client's own credentials to another origin on a redirect**: auth set with `SetAuth`, `SetBasicAuth` or `SetBearerAuth` went on every hop of a followed redirect, whatever host or port the hop went to. The fix for issue #52 in 1.6.5 made such a hop drop `Request.Auth` and a caller's `Authorization` header, but the hop then fell back to the client's auth. Now a hop that leaves the origin the request started on gets no auth at all, and neither does any hop after it, even one that comes back to that origin: as `Request.Auth` already did, and as Fetch and Go's `net/http` do. This covers `DigestAuth` too, which no longer answers such a hop's challenge or sends it an answer to an earlier one.
+
 ## [1.7.3] - 2026-10-14
 
 ### Added
