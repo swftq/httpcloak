@@ -660,6 +660,14 @@ func (p *QUICHostPool) createConn(ctx context.Context) (*QUICConn, error) {
 			if err != nil {
 				return nil, err
 			}
+			// The winner's socket goes with its connection, whoever ends it: the
+			// peer, an idle timeout or QUICConn.Close. Chromium closes a session's
+			// sockets the same way, in QuicChromiumClientSession::OnConnectionClosed.
+			// Nothing closed this one before, and the transport's read loop kept
+			// it out of the garbage collector's reach. quic-go writes any
+			// CONNECTION_CLOSE before it cancels the connection's context, so
+			// this cuts nothing short.
+			context.AfterFunc(a.conn.Context(), a.close)
 			return a.conn, nil
 		},
 	}
@@ -684,11 +692,12 @@ type quicAttempt struct {
 	udp  *net.UDPConn
 }
 
-// close ends an attempt that failed or lost the race. Closing its
-// quic.Transport destroys the connection without sending CONNECTION_CLOSE,
-// which is how Chromium drops a QUIC attempt it no longer needs
-// (QuicSessionAttempt::Cancel closes with SILENT_CLOSE). quic.Transport.Close
-// leaves a socket it was handed open, so the socket is closed here too.
+// close ends an attempt that failed or lost the race, and the winner once its
+// connection has ended. Closing the quic.Transport under a live connection
+// destroys it without sending CONNECTION_CLOSE, which is how Chromium drops a
+// QUIC attempt it no longer needs (QuicSessionAttempt::Cancel closes with
+// SILENT_CLOSE). quic.Transport.Close leaves a socket it was handed open, so
+// the socket is closed here too.
 func (a quicAttempt) close() {
 	a.tr.Close()
 	a.udp.Close()
