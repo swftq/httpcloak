@@ -77,6 +77,28 @@ func TestJoinURL(t *testing.T) {
 		{"https://example.com/v1/", "users", "https://example.com/v1/users"},
 		{"https://example.com", "https://other.com/path", "https://other.com/path"},
 		{"https://example.com", "//cdn.example.com/file", "https://cdn.example.com/file"},
+		// A reference keeps its query and fragment; the "?" and "#" used to be
+		// escaped into the path.
+		{"https://example.com/a/b?x=1", "/app/page.html?q=1", "https://example.com/app/page.html?q=1"},
+		{"https://example.com/a/b?x=1", "next?q=1", "https://example.com/a/next?q=1"},
+		{"https://example.com/a/b?x=1", "?page=2", "https://example.com/a/b?page=2"},
+		{"https://example.com/a", "//cdn.example.com/x?q=1", "https://cdn.example.com/x?q=1"},
+		{"https://example.com/a", "/frag?q=1#sec", "https://example.com/frag?q=1#sec"},
+		// Dot segments go, in an absolute URL too, which used to pass through.
+		{"https://example.com/a/b/c", "../up?q=1", "https://example.com/a/up?q=1"},
+		{"https://example.com/a/b/c", "../../x/./y/../z", "https://example.com/x/z"},
+		{"https://example.com", "https://other.com/a/b/../c", "https://other.com/a/c"},
+		{"https://example.com", "HTTPS://other.com/x", "https://other.com/x"},
+		// Escapes stay as they are rather than being escaped again.
+		{"https://example.com", "/a%2Fb?q=a%20b", "https://example.com/a%2Fb?q=a%20b"},
+		// The query is encoded as Chrome and Firefox encode a Location's.
+		{"https://example.com", `/s?q=a b&n=café&s='x'&d="y"<>`, "https://example.com/s?q=a%20b&n=caf%C3%A9&s=%27x%27&d=%22y%22%3C%3E"},
+		{"https://example.com", "/s?a={}|^`&b=\\&r=%zz", "https://example.com/s?a={}|^`&b=\\&r=%zz"},
+		// Input net/url rejects gets the plain join from before.
+		{"https://example.com", "/bad%zz", "https://example.com/bad%25zz"},
+		{"https://example.com", "/t\tab", "https://example.com/t%09ab"},
+		// An empty path returns base as it is.
+		{"https://example.com/a?q=1#f", "", "https://example.com/a?q=1#f"},
 	}
 
 	for _, tt := range tests {

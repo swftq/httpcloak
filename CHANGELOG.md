@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **`client.Client` resolves a redirect's `Location` the way a browser does**: the `client` package follows redirects in its own loop, which resolved the `Location` with `JoinURL`. `JoinURL` took a relative reference as the new path whole, so its `?` and `#` were escaped into it: `Location: /app/page.html?q=1` was requested as `/app/page.html%3Fq=1`, and a query-only `?page=2` became a path segment, `%3Fpage=2`. Dot segments went out as written, and an existing `%XX` escape was escaped again. An absolute `Location` was used as given, dot segments included. Chrome 156 and Firefox 159 were captured following 302s to root-relative, path-relative, `..`, query-only, protocol-relative and absolute targets. The two browsers sent the same request-target for each: RFC 3986 reference resolution, with the query kept and dot segments removed. The hop now goes there, over HTTP/1.1 and HTTP/2, for every preset, and `FinalURL` names it. The root package's `Client`, which wraps `client.Client`, gets the same fix.
+
+  The hop's query is also percent-encoded as both browsers encoded it, with the URL standard's special-query set. A space, `"`, `'`, `<`, `>`, a control character or a non-ASCII byte becomes `%XX`, and existing `%XX` escapes are left alone. A raw space in an absolute `Location`'s query used to go into the HTTP/1.1 request line as it was, splitting it (`GET /sp?q=a b HTTP/1.1`). A `Location` that cannot be parsed, such as `/bad%zz`, now fails the request, as it failed in both browsers; it used to be requested as `/bad%25zz`.
+
+  `JoinURL` itself now resolves this way, query encoding included. A plain reference such as `JoinURL("https://example.com/v1", "users")` gives the same result as before. What changes is what it used to get wrong: a `?`, `#`, `..` or `%XX` in the reference, an upper-case scheme, or a scheme other than http and https, which it appended to the base's path. A base with no scheme now gives a rooted path: `JoinURL("example.com/v1", "users")` is `/example.com/users`. Input `net/url` cannot parse still gets the old string join.
+
 ## [1.7.3] - 2026-10-14
 
 ### Added
