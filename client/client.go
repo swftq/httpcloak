@@ -1303,6 +1303,26 @@ func (c *Client) doOnce(ctx context.Context, req *Request, redirectHistory []*Re
 						if (crossOrigin || schemeDowngrade) && (lk == "authorization" || lk == "proxy-authorization") {
 							continue
 						}
+						// The hop's cookies come from the jar, for its own URL.
+						// req.Headers holds the Cookie this request sent, copied
+						// in for debugging, so carrying it handed one host's
+						// cookies to the next and brought back any cookie the
+						// 3xx had just deleted. A Cookie the caller set goes on
+						// the first request only, as it does in the session.
+						if lk == "cookie" {
+							continue
+						}
+						// A hop that turns into a GET leaves the body behind, and
+						// the headers that describe it go with it: Fetch's
+						// request-body-header names, plus the Content-Length
+						// copied in with the rest. A GET carrying Content-Length
+						// left an HTTP/1.1 server waiting for a body.
+						if newMethod != method {
+							switch lk {
+							case "content-type", "content-length", "content-encoding", "content-language", "content-location":
+								continue
+							}
+						}
 						carriedHeaders[k] = v
 					}
 				}
@@ -1340,8 +1360,12 @@ func (c *Client) doOnce(ctx context.Context, req *Request, redirectHistory []*Re
 					OnRedirect: req.OnRedirect,
 				}
 
-				// 307/308 preserve body (use cached bytes since original reader was consumed)
-				if resp.StatusCode == 307 || resp.StatusCode == 308 {
+				// A hop that keeps the method keeps the body, as in Fetch's
+				// HTTP-redirect fetch: every 307 and 308, and a 301 or 302 for
+				// anything but a POST. Only 307 and 308 used to, so a PUT
+				// answered with 302 went out again empty. Cached bytes, since
+				// the original reader was consumed.
+				if newMethod == method {
 					if len(bodyBytes) > 0 {
 						newReq.Body = bytes.NewReader(bodyBytes)
 					}

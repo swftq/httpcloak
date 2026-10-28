@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **A redirect hop no longer describes a body it does not send**: when `client.Client` followed a 303, or a 301 or 302 that answered a POST, the GET kept the request's `Content-Length` and `Content-Type`, and any `Content-Encoding`, `Content-Language` or `Content-Location` you set. Over HTTP/1.1 the server waited for a body that never came, so the request ended in a timeout. Over HTTP/2 the GET went out with the stale headers. They now go with the body, as in Fetch's HTTP-redirect fetch. The reverse was broken too: a PUT or PATCH answered with 301 or 302 went out again with no body. A hop that keeps the method now keeps the body, not only on 307 and 308.
+
+### Security
+
+- **`client.Client` no longer sends one host's cookies to another on a redirect**: since 1.5.8, each hop of a followed redirect carried the `Cookie` header the request before it had sent. So a redirect to another host sent it cookies the jar holds only for the first host, and a cookie the redirect response had just deleted went out again on the next hop. Each hop now takes its cookies from the jar for its own URL, as browsers and the session do. A `Cookie` header you set yourself now goes on the first request only, as in the session; cookies that should follow a redirect belong in the jar. The root package's `Client` wraps `client.Client` and gets the same fix.
+
 ## [1.7.3] - 2026-10-14
 
 ### Added
