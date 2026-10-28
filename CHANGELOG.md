@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **A new HTTP/2 connection from a `Client` to a host with no IPv6 address no longer waits 250ms**: the `client` package's HTTP/2 pool gives the preferred address family, IPv6 unless `WithPreferIPv4()` is set, a 250ms head start over the other. When the host had no address of the preferred family it dialed nothing and still waited out the 250ms, so every new connection to an IPv4-only host, IP literals such as `127.0.0.1` included, was 250ms late: measured locally, the first request of a new `Client` over HTTP/2 took 253ms, and 2ms with `WithPreferIPv4()`. The other family is now dialed at once, as Chrome does: it holds IPv4 back only while an IPv6 attempt is pending. A host with addresses in both families still gives IPv6 its head start, cut short as before when an IPv6 dial fails. HTTP/1.1, HTTP/3 and `Session` connections were never affected; their dialers start the first address at once.
+
 ## [1.7.3] - 2026-10-14
 
 ### Added
