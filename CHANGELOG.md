@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`"*"` in a header order** (`fingerprint.OtherHeaders`): the headers the order does not name, usually the caller's, go where it stands instead of after everything else. The marker never reaches the wire.
 
 - **`Request.RedirectHop`**: marks a request built to follow a 3xx. The session sets it on every hop it follows.
+
 - **`initiator` request option** (`Request.Initiator` in Go; `initiator` in Python, Node.js, .NET and Android): names the page API a request stands for, `"fetch"` or `"xhr"`. Either makes it a CORS call unless the caller sets `Sec-Fetch-Mode` or `Sec-Fetch-Dest`, and the session carries it onto every redirect hop. Any other value fails the request.
   - Browsers send the two differently and nothing in the headers tells them apart. Firefox 159 sent every `XMLHttpRequest` with no `Priority` header at the same HTTP/2 weight as a `fetch()`, and on its first hop with `Referer` after `Connection`. With `"xhr"`, the Firefox presets now do the same.
   - A preset says what an `XMLHttpRequest` sends with `xhr_priority_header` (`H2FingerprintConfig.XHRPriorityHeader`); one that does not sends it like a `fetch()`.
@@ -69,6 +70,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`Connection` goes where each browser puts it on HTTP/1.1**: the writer sent it second, right after `Host`, for every preset. That is Chrome's place, but Firefox 159 sends it after `Accept-Encoding`, on the page and on every stylesheet, script, image and frame it loads, so a Firefox preset carried Chrome's layout on HTTP/1.1. Firefox presets now put it there, or later when the request carries a header that comes before it in Firefox's order, such as `Origin`. A preset or JSON profile places it by naming `connection` in its header order; one that does not keeps Chrome's place, so Chrome presets are byte-for-byte unchanged, and a `Connection` the caller sets keeps the preset's place. HTTP/2 and HTTP/3 carry no `Connection` and are unaffected.
 
 - **Exact headers send `Connection` as listed**: a `Connection` pair went out second whatever its place in the list, and one spelled in lowercase was not sent at all. It now goes out where the caller listed it and as they spelled it, like every other pair, and a lowercase `connection: close` also closes the pooled connection after the response.
+
+- **`client.Client.Prepare` shows the headers its request is sent with**: `Prepare` started from the preset's header map, which holds the navigation set, and the fetch-mode helpers only add to what they find. So on a prepared `fetch()` or subresource load (a JSON POST, `FetchModeCORS` or `FetchModeNoCors`), `GetAllHeaders` and `GetHeader` showed `Sec-Fetch-User: ?1` and `Upgrade-Insecure-Requests: 1` beside `Sec-Fetch-Mode: cors` or `no-cors`, plus `TE: trailers` on Firefox presets, and with `WithTLSOnly` they showed the preset's whole browser set. None of it was sent: `Send` goes through `Do`, which never used the map, so only the prepared request was wrong. `Prepare` now builds the headers the way `Do` does, and on every preset the prepared request matches what `Do` sends for a navigation, a form or JSON POST, a `cors` request and `no-cors` script, image and style loads.
 
 ## [1.7.4] - 2026-11-15
 

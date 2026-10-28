@@ -91,31 +91,16 @@ func (c *Client) Prepare(ctx context.Context, req *Request) (*PreparedRequest, e
 	// Normalize request (Content-Length: 0 for empty POST/PUT/PATCH, Content-Type detection, etc.)
 	normalizeRequestWithBody(httpReq, bodyBytes)
 
-	// Apply preset headers
-	for key, value := range c.preset.Headers {
-		httpReq.Header.Set(key, value)
+	// Apply headers the way doOnce does, since Send goes through Do. This used
+	// to start from the preset's header map, which holds the navigation set,
+	// and the mode helpers only add to what they find, so a prepared fetch()
+	// or subresource load showed Sec-Fetch-User and Upgrade-Insecure-Requests
+	// that Do never sends.
+	if c.config.TLSOnly {
+		applyTLSOnlyHeaders(httpReq, c.preset, req, parsedURL, c.effectiveHeaderOrder(req))
+	} else {
+		applyModeHeaders(httpReq, c.preset, req, parsedURL, c.effectiveHeaderOrder(req))
 	}
-
-	// Apply User-Agent
-	userAgent := c.preset.UserAgent
-	if req.UserAgent != "" {
-		userAgent = req.UserAgent
-	}
-	httpReq.Header.Set("User-Agent", userAgent)
-
-	// Apply custom headers (multi-value support)
-	for key, values := range req.Headers {
-		for i, value := range values {
-			if i == 0 {
-				httpReq.Header.Set(key, value)
-			} else {
-				httpReq.Header.Add(key, value)
-			}
-		}
-	}
-
-	// Apply Sec-Fetch headers based on mode
-	applyModeHeaders(httpReq, c.preset, req, parsedURL, c.effectiveHeaderOrder(req))
 
 	// Apply cookies if enabled
 	if c.cookies != nil {
