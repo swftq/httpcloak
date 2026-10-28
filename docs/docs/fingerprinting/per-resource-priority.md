@@ -218,10 +218,13 @@ To turn per-resource priority off entirely on a preset (every request gets the s
 |---|---|---|---|
 | Chrome desktop and Android | weight from the urgency (256, 220, 183, ...), exclusive, chained onto the newest open stream at the same or a higher priority | HTTP/2 and HTTP/3, never HTTP/1.1 | Chrome's 14-destination table |
 | Firefox | weight from Firefox's table (42, 32, 22, 12), never exclusive, parent stream 0 | every protocol, HTTP/1.1 included | Firefox's table |
-| Safari, desktop and iOS | weight 255 on every request, never exclusive, parent stream 0 | none | none |
+| Safari 26, desktop and iOS | none | every protocol, HTTP/1.1 included, always with `u=` and `i` | Safari's 7-destination table |
+| Safari 17 and 18, desktop and iOS | weight 255 on every request, never exclusive, parent stream 0 | none | none |
 | Chrome on iOS | weight 255 on every request, never exclusive, parent stream 0 | HTTP/2 and HTTP/3, never HTTP/1.1 | none |
 
-A custom preset inherits the 14-dest table for free unless you override it. Setting `http2.no_rfc7540_priorities: true` turns the table off and advertises `SETTINGS_NO_RFC7540_PRIORITIES`, the way Safari does; every request then goes at the static `stream_weight`.
+Safari 26 was measured on macOS 26.3 and in the iOS 26.3.1 simulator. It sends `u=0, i` for a document or an iframe, `u=1, i` for a stylesheet or a script, `u=3, i` for a font or a `fetch()` and `u=5, i` for an image, on HTTP/1.1, HTTP/2 and HTTP/3 alike. It writes the urgency even at the default, `u=3, i`, where Chrome would write just `i`, which is what `priority_always_urgency` in a preset says. An async script goes at `u=3, i`, which the table cannot tell from a blocking one, so set the header on the request for it.
+
+A custom preset inherits the 14-dest table for free unless you override it. Setting `http2.no_rfc7540_priorities: true` turns the inherited table off and advertises `SETTINGS_NO_RFC7540_PRIORITIES`, the way Safari does; every request then goes at the static `stream_weight`. A preset that sets it and brings a `priority_table` of its own, as Safari 26 does, sends that table's priority header and no priority fields on HEADERS at all.
 
 ## Why this matters
 

@@ -293,9 +293,9 @@ func TestDescribe_PriorityTableEmittedForRFC7540Presets(t *testing.T) {
 	mustOmit := []string{
 		"chrome-147-ios",
 		"chrome-148-ios",
-		"safari-latest",
+		"safari-18",
 		"ios-chrome-latest",
-		"ios-safari-latest",
+		"safari-18-ios",
 	}
 	for _, name := range mustEmit {
 		out, err := Describe(name)

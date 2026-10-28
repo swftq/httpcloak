@@ -3631,8 +3631,10 @@ public static class Presets
     // Safari (desktop and mobile)
     public const string SafariLatest = "safari-latest";
     public const string Safari18 = "safari-18";
+    public const string Safari26 = "safari-26";
     public const string Safari17Ios = "safari-17-ios";
     public const string Safari18Ios = "safari-18-ios";
+    public const string Safari26Ios = "safari-26-ios";
     public const string SafariLatestIos = "safari-latest-ios";
 
     // Backwards compatibility aliases (old "ios-chrome" / "android-chrome" naming)
@@ -3645,6 +3647,7 @@ public static class Presets
     public const string IosChromeLatest = ChromeLatestIos;
     public const string IosSafari17 = Safari17Ios;
     public const string IosSafari18 = Safari18Ios;
+    public const string IosSafari26 = Safari26Ios;
     public const string IosSafariLatest = SafariLatestIos;
     public const string AndroidChrome143 = Chrome143Android;
     public const string AndroidChrome144 = Chrome144Android;

@@ -65,9 +65,11 @@ The per-OS variants differ from their base in the User-Agent only. Firefox does 
 
 | Preset | Notes |
 |---|---|
-| `safari-18` (`safari-latest`) | Desktop macOS Safari 18, supports h3 |
+| `safari-26` (`safari-latest`) | Desktop macOS Safari 26, supports h3 |
+| `safari-18` | Desktop macOS Safari 18, supports h3 |
 | `safari-17-ios` (`ios-safari-17`) | iPhone Safari 17, h2 only |
-| `safari-18-ios` (`ios-safari-18`, `safari-latest-ios`) | iPhone Safari 18, supports h3 |
+| `safari-18-ios` (`ios-safari-18`) | iPhone Safari 18, supports h3 |
+| `safari-26-ios` (`ios-safari-26`, `safari-latest-ios`) | iPhone Safari 26, supports h3 |
 
 Safari sets `NoRFC7540Priorities=true`, so it never emits the H2 PRIORITY frame, and RFC 9218 priority headers carry the signal instead. That's the single biggest tell that splits a Safari fingerprint from a Chrome one at the H2 layer, even though both ALPN as h2.
 
@@ -78,6 +80,7 @@ The older `<os>-<browser>-<version>` naming still works for code written against
 ```
 ios-chrome-148        → chrome-148-ios
 ios-safari-18         → safari-18-ios
+ios-safari-26         → safari-26-ios
 android-chrome-148    → chrome-148-android
 ios-chrome-latest     → chrome-155-ios
 android-chrome-latest → chrome-155-android

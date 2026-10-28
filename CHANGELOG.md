@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Safari 26 presets**: `safari-26` and `safari-26-ios`, with `safari-latest`, `safari-latest-ios` and `ios-safari-latest` moved onto them and an `ios-safari-26` alias. They come from a capture of Safari 26.3 on macOS 26.3 and in the iOS 26.3.1 simulator, against a server that logs HTTP/1.1 as sent and every HTTP/2 frame. The ClientHello is unchanged from 18. The rest moved:
+  - HTTP/2: SETTINGS `2,3,4,9` with no MAX_FRAME_SIZE, a connection window of 10420225, pseudo-headers `m,s,a,p`, and no priority fields on any HEADERS frame. These match `chrome-155-ios`, whose JA3 and Akamai hashes the capture reproduces, since Chrome on iOS runs on the same WebKit.
+  - Headers: a priority header on every request, on HTTP/1.1 as well, always with `u=` and `i`: `u=0` for a document or an iframe, `u=1` for a stylesheet or a script, `u=3` for a font or a `fetch()`, `u=5` for an image. A header order led by `sec-fetch-dest` and `user-agent`, `referer` right after `accept`, `zstd` in Accept-Encoding, and no `Sec-Fetch-User`, which WebKit does not implement.
+  - The HTTP/3 and QUIC values are 18's; the capture could not see them.
+
+  The priority table on a preset that announces `SETTINGS_NO_RFC7540_PRIORITIES` now drives the priority header only, never priority fields on HEADERS. A new preset field, `priority_always_urgency`, writes the urgency even at its default, `u=3, i`, as Safari does; Chrome writes `i`. The Python, Node and .NET preset constants gain `safari-26` and `safari-26-ios`.
+
 ## [1.7.3] - 2026-10-14
 
 ### Added

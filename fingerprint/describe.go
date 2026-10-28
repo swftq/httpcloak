@@ -332,6 +332,10 @@ func flattenHTTP2(p *Preset) *HTTP2Spec {
 	// the derivation partly reads the name, which a loaded copy may change.
 	h1 := p.SendsPriorityOverHTTP1()
 	out.PriorityOverHTTP1 = &h1
+	if p.H2Config != nil && p.H2Config.PriorityAlwaysUrgency {
+		always := true
+		out.PriorityAlwaysUrgency = &always
+	}
 
 	return out
 }

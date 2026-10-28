@@ -31,8 +31,8 @@ The `-latest` aliases point to the newest tracked version. They're not separate 
 | `firefox-latest-windows` | `firefox-148-windows` |
 | `firefox-latest-linux` | `firefox-148-linux` |
 | `firefox-latest-macos` | `firefox-148-macos` |
-| `safari-latest` | `safari-18` |
-| `safari-latest-ios` | `safari-18-ios` |
+| `safari-latest` | `safari-26` |
+| `safari-latest-ios` | `safari-26-ios` |
 
 iOS Chrome spells its version out in full, including a build number that cannot be
 derived from the major version, so each iOS preset is built from a real capture rather
@@ -44,7 +44,7 @@ The old-style names are kept for back-compat and follow the same targets:
 | Alias | Resolves to |
 |---|---|
 | `ios-chrome-latest` | `chrome-155-ios` |
-| `ios-safari-latest` | `safari-18-ios` |
+| `ios-safari-latest` | `safari-26-ios` |
 | `android-chrome-latest` | `chrome-155-android` |
 
 Version-pinned old-style names (`ios-chrome-NNN`, `android-chrome-NNN`) only exist for 143 through 148. For anything newer, use the `chrome-NNN-ios` / `chrome-NNN-android` spelling.
@@ -198,14 +198,15 @@ All Firefox presets:
 
 | Preset | UA | TLS | Notes |
 |---|---|---|---|
+| `safari-26` | `Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.3 Safari/605.1.15` | `HelloSafari_18` | Captured from Safari 26.3. H3 and QUIC values are 18's, not measured for 26. |
 | `safari-18` | `Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15` | `HelloSafari_18` | H3 via `HelloIOS_18_QUIC` (Safari shares iOS QUIC). |
 
 Safari macOS:
 
-- Pseudo order `m,s,p,a`, different from both Chrome and Firefox.
-- `NO_RFC7540_PRIORITIES=1`. Safari opts out of stream priorities.
-- No `sec-ch-ua` (Safari doesn't ship Client Hints). Header order is shorter than Chrome's.
-- Default Akamai: `2:0;4:2097152;3:100;5:16384;9:1|10485760|0|m,s,p,a`.
+- Pseudo order `m,s,p,a` on 18, `m,s,a,p` on 26.
+- `NO_RFC7540_PRIORITIES=1`. Safari opts out of stream priorities. Safari 26 also puts no priority fields on HEADERS, and sends an RFC 9218 `priority` header on every request, HTTP/1.1 included.
+- No `sec-ch-ua` (Safari doesn't ship Client Hints). Header order is shorter than Chrome's. Safari 26 sends no `Sec-Fetch-User`.
+- Default Akamai on 18: `2:0;4:2097152;3:100;5:16384;9:1|10485760|0|m,s,p,a`. On 26: `2:0;3:100;4:2097152;9:1|10420225|0|m,s,a,p`, the same as `chrome-155-ios`, since Chrome on iOS runs on WebKit.
 
 ---
 
@@ -213,6 +214,7 @@ Safari macOS:
 
 | Preset | UA | TLS | Notes |
 |---|---|---|---|
+| `safari-26-ios` | `Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.3 Mobile/15E148 Safari/604.1` | `HelloIOS_18` | Captured in the iOS 26.3.1 simulator, which reports `iPhone OS 18_7`. Same HTTP/2 layer and priority headers as `safari-26`. |
 | `safari-18-ios` | `Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1` | `HelloIOS_18` | H3 via `HelloIOS_18_QUIC`. |
 | `safari-17-ios` | `...iPhone OS 17_0...Version/17.0 Mobile...` | `HelloIOS_17` | Older variant; H1 / H2 only (no proper H3 TLS spec for iOS Safari 17). |
 

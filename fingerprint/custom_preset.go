@@ -195,6 +195,10 @@ type HTTP2Spec struct {
 	// PriorityOverHTTP1 sends the table's priority header on HTTP/1.1 too;
 	// see Preset.SendsPriorityOverHTTP1. Omitted derives it.
 	PriorityOverHTTP1 *bool `json:"priority_over_http1,omitempty"`
+
+	// PriorityAlwaysUrgency writes u= in the priority header even at the
+	// default urgency; see H2FingerprintConfig.PriorityAlwaysUrgency.
+	PriorityAlwaysUrgency *bool `json:"priority_always_urgency,omitempty"`
 }
 
 // ResourcePrioritySpec is the JSON shape of fingerprint.ResourcePriority.
@@ -1089,7 +1093,8 @@ func applyHTTP2(p *Preset, spec *HTTP2Spec) error {
 		spec.DisableCookieSplit != nil || spec.PriorityTable != nil ||
 		spec.DataFrameMaxSize != nil || spec.PrefacePingIdleMs != nil ||
 		spec.PrefacePingHangMs != nil || spec.IdlePingMs != nil ||
-		spec.PriorityModel != nil || spec.PriorityOverHTTP1 != nil {
+		spec.PriorityModel != nil || spec.PriorityOverHTTP1 != nil ||
+		spec.PriorityAlwaysUrgency != nil {
 		if p.H2Config == nil {
 			p.H2Config = &H2FingerprintConfig{}
 		}
@@ -1164,6 +1169,9 @@ func applyHTTP2(p *Preset, spec *HTTP2Spec) error {
 		if spec.PriorityOverHTTP1 != nil {
 			v := *spec.PriorityOverHTTP1
 			p.H2Config.PriorityOverHTTP1 = &v
+		}
+		if spec.PriorityAlwaysUrgency != nil {
+			p.H2Config.PriorityAlwaysUrgency = *spec.PriorityAlwaysUrgency
 		}
 	}
 
