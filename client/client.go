@@ -1248,8 +1248,11 @@ func (c *Client) doOnce(ctx context.Context, req *Request, redirectHistory []*Re
 				newMethod = "GET"
 			}
 
-			// Browser-parity scrubbing on scheme downgrade / cross-origin.
-			// See session.requestWithRedirects for the same policy and rationale.
+			// Browser-parity credential scrubbing on a cross-origin hop, which
+			// includes every scheme downgrade. See session.requestWithRedirects
+			// for the same policy and rationale. The Referer follows its own
+			// rule, judged against the Referer rather than the URL that issued
+			// the 3xx; see redirectRefererClient.
 			schemeDowngrade := isSchemeDowngradeClient(reqURL, redirectURL)
 			crossOrigin := !sameOriginClient(reqURL, redirectURL)
 
@@ -1297,7 +1300,8 @@ func (c *Client) doOnce(ctx context.Context, req *Request, redirectHistory []*Re
 					carriedHeaders = make(map[string][]string, len(req.Headers))
 					for k, v := range req.Headers {
 						lk := strings.ToLower(k)
-						if schemeDowngrade && lk == "referer" {
+						// Referer is worked out below, from what this request sent.
+						if lk == "referer" {
 							continue
 						}
 						if (crossOrigin || schemeDowngrade) && (lk == "authorization" || lk == "proxy-authorization") {
@@ -1307,12 +1311,33 @@ func (c *Client) doOnce(ctx context.Context, req *Request, redirectHistory []*Re
 					}
 				}
 
-				carriedReferer := reqURL
+				// The next hop's Referer is the one this request sent, with the
+				// referrer policy applied again for the new URL. Chrome, Firefox
+				// and WebKit all do this. It is never the URL that issued the 3xx:
+				// a page whose fetch() is redirected names the page on both hops,
+				// and a typed navigation that redirects sends no Referer on either.
+				// Each hop starts from what the hop before it sent, so a Referer
+				// cut to its origin stays cut, even when the chain comes back.
+				//
+				// It goes in the carried headers as well as the field. req.Headers
+				// holds a copy of every header this request sent, made for
+				// debugging before the send, and the hop applies carried headers
+				// after the field, so a stale copy would beat it. TLSOnly reads
+				// only the headers.
+				var sentReferer string
+				if v, ok := getHeaderCaseInsensitive(httpReq.Header, "Referer"); ok && len(v) > 0 {
+					sentReferer = v[0]
+				}
+				carriedReferer := redirectRefererClient(sentReferer, redirectURL)
+				if carriedReferer != "" {
+					if carriedHeaders == nil {
+						carriedHeaders = make(map[string][]string, 1)
+					}
+					carriedHeaders["Referer"] = []string{carriedReferer}
+				}
+
 				carriedAuth := req.Auth
-				if schemeDowngrade {
-					carriedReferer = ""
-					carriedAuth = nil
-				} else if crossOrigin {
+				if crossOrigin || schemeDowngrade {
 					carriedAuth = nil
 				}
 
@@ -2409,7 +2434,8 @@ func decompress(data []byte, encoding string) ([]byte, error) {
 }
 
 // parseOriginClient returns (scheme, host, port) with default ports filled in.
-// Used to gate header scrubbing on scheme downgrade / cross-origin redirects.
+// Used to gate header scrubbing on scheme downgrade / cross-origin redirects,
+// and to work out each hop's Referer.
 func parseOriginClient(urlStr string) (scheme, host, port string) {
 	u, err := url.Parse(urlStr)
 	if err != nil || u.Scheme == "" {
@@ -2439,9 +2465,74 @@ func sameOriginClient(a, b string) bool {
 	return as == bs && ah == bh && ap == bp
 }
 
-// isSchemeDowngradeClient reports whether a redirect goes https → http.
+// isSchemeDowngradeClient reports whether going from one URL to the other is
+// https → http: a redirect that downgrades, or an https Referer going to an
+// http URL.
 func isSchemeDowngradeClient(from, to string) bool {
 	fs, _, _ := parseOriginClient(from)
 	ts, _, _ := parseOriginClient(to)
 	return fs == "https" && ts == "http"
+}
+
+// redirectRefererClient returns the Referer to send on the next redirect hop:
+// the Referer the current hop sent, with Chrome's default
+// strict-origin-when-cross-origin policy applied again for nextURL. Returns ""
+// when the next hop should carry none.
+//   - an https Referer going to a non-https URL: none
+//   - nextURL on the Referer's own origin: the Referer as it was, minus any
+//     fragment and credentials
+//   - any other origin: the Referer's ORIGIN only, serialized with a trailing
+//     slash (e.g. "https://example.com/")
+//   - a Referer that is not an http or https URL: none, as a browser never
+//     sends one it cannot parse
+//
+// Both checks look at the Referer, not at the URL that issued the 3xx, which is
+// how Chrome, Firefox and WebKit carry it. So a Referer trimmed on one hop
+// stays trimmed. The client cannot follow a hop to http, but the rule is kept
+// whole.
+//
+// This is session.redirectReferer, copied like the helpers above so that this
+// package does not import session. Keep the two in step.
+func redirectRefererClient(referrer, nextURL string) string {
+	scheme, host, port := parseOriginClient(referrer)
+	if (scheme != "http" && scheme != "https") || host == "" {
+		return ""
+	}
+	if isSchemeDowngradeClient(referrer, nextURL) {
+		return ""
+	}
+	if sameOriginClient(referrer, nextURL) {
+		return sameOriginRefererClient(referrer)
+	}
+	if strings.Contains(host, ":") { // IPv6 literal needs brackets
+		host = "[" + host + "]"
+	}
+	origin := scheme + "://" + host
+	if !((scheme == "https" && port == "443") || (scheme == "http" && port == "80")) {
+		origin += ":" + port
+	}
+	return origin + "/"
+}
+
+// sameOriginRefererClient returns a Referer URL as Chrome puts it in the header
+// on a same-origin hop: the full URL minus the fragment and any userinfo
+// (credentials), with a redundant default port dropped
+// (https://h:443/a -> https://h/a). A copy of session.sameOriginReferer.
+func sameOriginRefererClient(referrer string) string {
+	u, err := url.Parse(referrer)
+	if err != nil {
+		return ""
+	}
+	u.Fragment = ""
+	u.RawFragment = ""
+	u.User = nil
+	scheme := strings.ToLower(u.Scheme)
+	if p := u.Port(); (scheme == "https" && p == "443") || (scheme == "http" && p == "80") {
+		host := u.Hostname()
+		if strings.Contains(host, ":") { // IPv6 literal needs brackets
+			host = "[" + host + "]"
+		}
+		u.Host = host
+	}
+	return u.String()
 }
