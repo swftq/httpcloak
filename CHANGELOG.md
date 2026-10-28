@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **`client.Client.Prepare` shows the headers its request is sent with**: `Prepare` started from the preset's header map, which holds the navigation set, and the fetch-mode helpers only add to what they find. So on a prepared `fetch()` or subresource load (a JSON POST, `FetchModeCORS` or `FetchModeNoCors`), `GetAllHeaders` and `GetHeader` showed `Sec-Fetch-User: ?1` and `Upgrade-Insecure-Requests: 1` beside `Sec-Fetch-Mode: cors` or `no-cors`, plus `TE: trailers` on Firefox presets, and with `WithTLSOnly` they showed the preset's whole browser set. None of it was sent: `Send` goes through `Do`, which never used the map, so only the prepared request was wrong. `Prepare` now builds the headers the way `Do` does, and on every preset the prepared request matches what `Do` sends for a navigation, a form or JSON POST, a `cors` request and `no-cors` script, image and style loads.
+
 ## [1.7.3] - 2026-10-14
 
 ### Added
