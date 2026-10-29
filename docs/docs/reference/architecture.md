@@ -98,7 +98,7 @@ The other things this package owns:
 
 - **Speculative TLS for proxy CONNECT**: sends the CONNECT request and the TLS ClientHello in one TCP write, saving a round-trip. Off by default because some proxies choke on it. Toggled by `WithEnableSpeculativeTLS`.
 - **Happy Eyeballs**: IPv4/IPv6 racing inside the H3 dial functions. The first address to complete the QUIC handshake wins. The losers are dropped without a `CONNECTION_CLOSE`, the way Chromium drops a QUIC session it no longer needs.
-- **`raceH3H2`**: protocol racing. When a host advertises H3 via Alt-Svc and no protocol has been forced, an H3 dial and an H2 dial fire in parallel. The first successful handshake wins.
+- **`raceH3H2`**: protocol racing. When a host advertises H3 via Alt-Svc and no protocol has been forced, an H3 dial and an H2 dial fire in parallel. The first successful handshake wins, and the request goes out on the connection it made. An H3 attempt that loses but still finishes its handshake is dropped without a `CONNECTION_CLOSE`.
 - **TLS session ticket cache**: in-memory by default, pluggable via `WithSessionCache(backend, errCb)` for distributed setups (Redis and friends).
 - **Connection pool**: per-transport with an idle timeout. H3 idle is set via `WithQuicIdleTimeout`.
 

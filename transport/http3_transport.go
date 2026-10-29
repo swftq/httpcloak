@@ -28,6 +28,7 @@ import (
 	"github.com/sardanioss/udpbara"
 	tls "github.com/sardanioss/utls"
 	utls "github.com/sardanioss/utls"
+	"golang.org/x/net/idna"
 )
 
 // HTTP/3 SETTINGS identifiers
@@ -258,6 +259,10 @@ type proxyQUICConn struct {
 	udpConn   *udpbara.Connection
 	quicTr    *quic.Transport
 	closeOnce sync.Once
+
+	// conn is the connection dialed on quicTr, set under proxyConnsMu once the
+	// dial succeeds, so dropConn can find the transport to close.
+	conn *quic.Conn
 }
 
 // HTTP3Transport is an HTTP/3 transport with proper QUIC connection reuse
@@ -334,6 +339,12 @@ type HTTP3Transport struct {
 	// host:port it was dialed for, so one origin's connections can be ended
 	// without touching the others'. Guarded by liveMu.
 	byOrigin map[string]map[*quic.Conn]struct{}
+
+	// parked holds a connection made ahead of its request, by Connect or by
+	// auto mode's protocol race, under the address the http3 transport will
+	// dial for that request (h3DialAddr). The dial takes it instead of opening
+	// another. Guarded by liveMu.
+	parked map[string]*quic.Conn
 
 	// MASQUE proxy support
 	masqueConn *proxy.MASQUEConn
@@ -1118,6 +1129,9 @@ func (t *HTTP3Transport) dialQUICWithProxy(ctx context.Context, addr string, tls
 		t.removeProxyConn(pc)
 		return nil, err
 	}
+	t.proxyConnsMu.Lock()
+	pc.conn = conn
+	t.proxyConnsMu.Unlock()
 
 	// Auto-cleanup when the QUIC connection closes (timeout, error, idle, explicit).
 	// Without this, failed requests leave quic.Transport goroutines + udpbara relay
@@ -1341,6 +1355,99 @@ func (t *HTTP3Transport) dropDirectConn(conn *quic.Conn) {
 	}
 }
 
+// dropConn ends a connection that nothing will use, from any dial path, by
+// closing the quic.Transport under it, which destroys it without sending
+// CONNECTION_CLOSE (see dropDirectConn). A connection through a MASQUE proxy
+// is the exception: it runs on a transport quic-go makes inside DialEarly,
+// which nothing here can reach, so it is closed the way Close closes every
+// connection, with application error 0 and no reason.
+func (t *HTTP3Transport) dropConn(conn *quic.Conn) {
+	switch {
+	case t.masqueConn != nil:
+		conn.CloseWithError(0, "")
+	case t.usesUDPProxy:
+		// Nil when the connection has already ended and its cleanup closed it.
+		if pc := t.takeProxyConn(conn); pc != nil {
+			closeProxyConn(pc)
+		}
+	default:
+		t.dropDirectConn(conn)
+	}
+}
+
+// h3DialAddr is the address the http3 transport dials for a request to
+// host:port, built the way quic-go's authorityAddr builds it from the URL: the
+// host in its ASCII (IDNA) form, joined to the port. A connection kept for a
+// request is filed under it, so the request's dial finds it.
+func h3DialAddr(host, port string) string {
+	if a, err := idna.ToASCII(host); err == nil {
+		host = a
+	}
+	return net.JoinHostPort(host, port)
+}
+
+// park keeps conn for the next dial to addr, which takes it instead of opening
+// another connection. One connection waits per origin: when a live one already
+// does, conn is dropped, since the waiting one serves the request as well.
+func (t *HTTP3Transport) park(addr string, conn *quic.Conn) {
+	t.liveMu.Lock()
+	waiting := t.parked[addr]
+	keep := !t.h3Closed && (waiting == nil || waiting.Context().Err() != nil)
+	if keep {
+		if t.parked == nil {
+			t.parked = make(map[string]*quic.Conn)
+		}
+		t.parked[addr] = conn
+	}
+	t.liveMu.Unlock()
+	if !keep {
+		t.dropConn(conn)
+	}
+}
+
+// takeParked hands over the connection kept for addr, if it is still open.
+func (t *HTTP3Transport) takeParked(addr string) *quic.Conn {
+	t.liveMu.Lock()
+	conn := t.parked[addr]
+	delete(t.parked, addr)
+	t.liveMu.Unlock()
+	if conn == nil || conn.Context().Err() != nil {
+		return nil
+	}
+	return conn
+}
+
+// unpark drops conn if it is still waiting for a dial to addr, which happens
+// when the request it was kept for went out on a connection the http3
+// transport already had for the origin.
+func (t *HTTP3Transport) unpark(addr string, conn *quic.Conn) {
+	t.liveMu.Lock()
+	waiting := t.parked[addr] == conn
+	if waiting {
+		delete(t.parked, addr)
+	}
+	t.liveMu.Unlock()
+	if waiting {
+		t.dropConn(conn)
+	}
+}
+
+// parkedFirst wraps a dial function so that a dial takes the connection kept
+// for its origin, when there is one, before it opens a new one.
+func (t *HTTP3Transport) parkedFirst(
+	dial func(ctx context.Context, addr string, tlsCfg *tls.Config, cfg *quic.Config) (*quic.Conn, error),
+) func(ctx context.Context, addr string, tlsCfg *tls.Config, cfg *quic.Config) (*quic.Conn, error) {
+	if dial == nil {
+		return nil
+	}
+	return func(ctx context.Context, addr string, tlsCfg *tls.Config, cfg *quic.Config) (*quic.Conn, error) {
+		if conn := t.takeParked(addr); conn != nil {
+			return conn, nil
+		}
+		return dial(ctx, addr, tlsCfg, cfg)
+	}
+}
+
 // trackOrigin records a live connection under the origin it was dialed for,
 // until it ends.
 func (t *HTTP3Transport) trackOrigin(addr string, conn *quic.Conn) {
@@ -1386,7 +1493,9 @@ func originKey(u *url.URL) string {
 // closeDirectConns ends every direct connection and closes its socket. The
 // http3 pool can drop a connection without closing it, and keep-alive stops
 // such a connection from ever idling out, so this is the only thing that ends
-// those. With final set, later dials are refused.
+// those. With final set, later dials are refused. Connections kept for a
+// request are forgotten too: a direct one is closed here, and one through a
+// proxy goes with the proxy's connections.
 func (t *HTTP3Transport) closeDirectConns(final bool) {
 	t.liveMu.Lock()
 	if final {
@@ -1394,6 +1503,7 @@ func (t *HTTP3Transport) closeDirectConns(final bool) {
 	}
 	sockets := t.sockets
 	t.sockets = nil
+	t.parked = nil
 	t.liveMu.Unlock()
 	for conn, sock := range sockets {
 		conn.CloseWithError(0, "")
@@ -1459,7 +1569,7 @@ func (t *HTTP3Transport) buildHTTP3Transport(dialFunc func(ctx context.Context, 
 	return &http3.Transport{
 		TLSClientConfig:        t.tlsConfig,
 		QUICConfig:             t.quicConfig,
-		Dial:                   t.recordHandshakeState(dialFunc),
+		Dial:                   t.recordHandshakeState(t.parkedFirst(dialFunc)),
 		EnableDatagrams:        true, // Always true at HTTP/3 level (original behavior); H3 SETTINGS controls per-browser advertisement
 		AdditionalSettings:     additionalSettings,
 		MaxResponseHeaderBytes: int(t.preset.H3MaxResponseHeaderBytes()),
@@ -1758,6 +1868,20 @@ func (t *HTTP3Transport) removeProxyConn(pc *proxyQUICConn) {
 	}
 }
 
+// takeProxyConn removes and returns the tracked proxy connection that conn
+// was dialed on, or nil when it has already been closed.
+func (t *HTTP3Transport) takeProxyConn(conn *quic.Conn) *proxyQUICConn {
+	t.proxyConnsMu.Lock()
+	defer t.proxyConnsMu.Unlock()
+	for i, pc := range t.proxyConns {
+		if pc.conn == conn {
+			t.proxyConns = append(t.proxyConns[:i], t.proxyConns[i+1:]...)
+			return pc
+		}
+	}
+	return nil
+}
+
 // closeProxyConn closes a single proxyQUICConn exactly once.
 func closeProxyConn(pc *proxyQUICConn) {
 	pc.closeOnce.Do(func() {
@@ -1853,18 +1977,8 @@ func (t *HTTP3Transport) Refresh() error {
 	// Build additional settings from preset getters
 	additionalSettings := t.buildH3AdditionalSettings()
 
-	// Determine which dial function to use and recreate transport
-	var dialFunc func(ctx context.Context, addr string, tlsCfg *tls.Config, cfg *quic.Config) (*quic.Conn, error)
-	if t.masqueConn != nil {
-		dialFunc = t.dialQUICWithMASQUE
-	} else if t.usesUDPProxy {
-		dialFunc = t.dialQUICWithProxy
-	} else {
-		dialFunc = t.dialQUIC
-	}
-
 	// Recreate the transport with same configuration
-	t.transport = t.buildHTTP3Transport(dialFunc, additionalSettings)
+	t.transport = t.buildHTTP3Transport(t.dialFunc(), additionalSettings)
 
 	return nil
 }
@@ -2039,177 +2153,145 @@ func (t *HTTP3Transport) invalidateECHConfig(host string) {
 	dns.InvalidateECHConfig(host)
 }
 
-// Connect establishes a QUIC connection to the host without making a request.
-// This is used for protocol racing - the first protocol to connect wins.
+// Connect establishes a QUIC connection to host:port without making a request,
+// and keeps it for the next request there, as HTTP2Transport.Connect keeps its
+// connection in the pool. It dials the way a request does, through the proxy
+// when one is configured.
+//
+// It used to be a reachability probe for auto mode's protocol race: it dialed
+// a connection of its own with quic.DialAddr and closed it again with
+// CloseWithError(0, "connect probe"), and the request then dialed a second
+// one. The race now goes through h3Race, which sends the request on the
+// connection it made.
 func (t *HTTP3Transport) Connect(ctx context.Context, host, port string) error {
-	// Proxied transports MUST probe through the proxy. The direct quic.DialAddr
-	// probe below would dial the target straight from the local socket, leaking
-	// the real client IP and never actually testing whether QUIC relays through
-	// the proxy. Route through the same dial path doHTTP3 uses for real requests.
-	// Keyed off usesUDPProxy (not the tunnel handle) because the tunnel is
-	// connected lazily — on the first probe it is still nil, and falling through
-	// to the direct path here would leak the real IP.
-	if t.masqueConn != nil || t.usesUDPProxy {
-		return t.connectViaProxy(ctx, host, port)
-	}
-
-	// Use connect host for DNS resolution (may differ for domain fronting)
-	connectHost := t.getConnectHost(host)
-	addr := net.JoinHostPort(connectHost, port)
-
-	// Use DNS cache for resolution - resolve connectHost, not request host
-	ip, err := t.dnsCache.ResolveOne(ctx, connectHost)
+	addr, conn, err := t.dialAhead(ctx, host, port)
 	if err != nil {
-		return fmt.Errorf("DNS resolution failed: %w", err)
+		return err
 	}
-
-	resolvedAddr := net.JoinHostPort(ip.String(), port)
-
-	// Determine key log writer - config override or global
-	var keyLogWriter io.Writer
-	if t.config != nil && t.config.KeyLogWriter != nil {
-		keyLogWriter = t.config.KeyLogWriter
-	} else {
-		keyLogWriter = GetKeyLogWriter()
-	}
-
-	// Create TLS config - use request host for SNI
-	tlsCfg := &tls.Config{
-		ServerName:         host,
-		NextProtos:         []string{"h3"},
-		InsecureSkipVerify: t.insecureSkipVerify,
-		KeyLogWriter:       keyLogWriter,
-	}
-	t.tlsVerify.Apply(tlsCfg)
-
-	// Fetch ECH configs from DNS HTTPS records (use request host for ECH).
-	// Skipped for a host that recently stalled or rejected ECH (issue #74), and
-	// skipped when the caller has turned ECH off.
-	//
-	// t.disableECH was missing from this condition. dialQUIC honours it, so the
-	// documented "disable ECH for a faster first request" option worked on the
-	// real request path and did nothing here, on the probe that runs first in
-	// auto mode. The query walks three public resolvers serially, so a caller
-	// who had explicitly opted out still paid for it on every new host.
-	var echConfigList []byte
-	if !t.disableECH && !dns.IsECHIncompatible(host) {
-		echConfigList, _ = dns.FetchECHConfigs(ctx, host)
-	}
-
-	// Determine QUIC idle timeout (default 30s, configurable)
-	quicIdleTimeout := 30 * time.Second
-	if t.config != nil && t.config.QuicIdleTimeout > 0 {
-		quicIdleTimeout = t.config.QuicIdleTimeout
-	}
-
-	// Get ClientHelloID for the probe connection
-	var clientHelloID *utls.ClientHelloID
-	if t.preset.QUICClientHelloID.Client != "" {
-		clientHelloID = &t.preset.QUICClientHelloID
-	} else if t.preset.ClientHelloID.Client != "" {
-		clientHelloID = &t.preset.ClientHelloID
-	}
-
-	// Build QUIC config from preset getters (same fingerprint as real connections)
-	quicCfg := t.buildQUICConfig(clientHelloID, quicIdleTimeout, 0)
-	// buildQUICConfig embeds the shared base spec; concurrent probes would
-	// race-mutate it via ApplyPreset. Hand this probe its own fresh spec
-	// (same seed -> identical fingerprint, private object -> no race).
-	quicCfg.CachedClientHelloSpec = t.getSpecForHost(host)
-	if len(echConfigList) > 0 {
-		quicCfg.ECHConfigList = echConfigList
-	}
-
-	// Try to establish QUIC connection. When ECH is applied, time-box the attempt
-	// (issue #74) so a stall on an incompatible ECH ClientHello fails fast, then
-	// retry the probe once WITHOUT ECH so H3 stays a viable race winner. The real
-	// request dial applies the same degradation.
-	var conn *quic.Conn
-	if len(echConfigList) > 0 {
-		echCtx, cancel := boundedECHAttempt(ctx)
-		conn, err = quic.DialAddr(echCtx, resolvedAddr, tlsCfg, quicCfg)
-		cancel()
-		if err != nil && ctx.Err() == nil && (echCausedDialFailure(err) || errors.Is(err, context.DeadlineExceeded)) {
-			dns.MarkECHIncompatible(host)
-			t.invalidateECHConfig(host)
-			echlessCfg := t.buildQUICConfig(clientHelloID, quicIdleTimeout, 0)
-			echlessCfg.CachedClientHelloSpec = t.getSpecForHost(host)
-			conn, err = quic.DialAddr(ctx, resolvedAddr, tlsCfg, echlessCfg)
-		}
-	} else {
-		conn, err = quic.DialAddr(ctx, resolvedAddr, tlsCfg, quicCfg)
-	}
-	if err != nil {
-		// Stale ECH (e.g. CDN key rotation) shows up here as a handshake
-		// rejection; drop the cached config so the next probe refetches.
-		if isECHRejectionError(err) {
-			t.invalidateECHConfig(host)
-		}
-		return fmt.Errorf("QUIC dial failed: %w", err)
-	}
-
-	// Connection established successfully - the http3.Transport will reuse this
-	// via its internal pooling when we make a real request
-	// For now, just track that we successfully dialed
-	t.mu.Lock()
-	t.dialCount++
-	t.mu.Unlock()
-
-	// Close this test connection - http3.Transport will create its own
-	// This is just to verify QUIC/H3 is reachable
-	_ = conn.CloseWithError(0, "connect probe")
-	_ = addr // suppress unused warning
-
+	t.park(addr, conn)
 	return nil
 }
 
-// connectViaProxy runs the H3 reachability probe THROUGH the configured proxy
-// (SOCKS5 UDP relay or MASQUE), mirroring the dial path doHTTP3 uses for real
-// requests. This is what makes raceH3H2 safe over a proxy: the probe tunnels
-// instead of dialing the target directly, so no real-IP leak and the race
-// actually learns whether QUIC relays through the proxy. The dialFunc selection
-// must stay in sync with Refresh()/recreateTransport().
-func (t *HTTP3Transport) connectViaProxy(ctx context.Context, host, port string) error {
-	var dialFunc func(context.Context, string, *tls.Config, *quic.Config) (*quic.Conn, error)
-	if t.masqueConn != nil {
-		dialFunc = t.dialQUICWithMASQUE
-	} else {
-		dialFunc = t.dialQUICWithProxy
+// dialFunc is the dial function the http3 transport is built with: through the
+// MASQUE proxy or the SOCKS5 relay when one is configured, direct otherwise.
+// Keyed off usesUDPProxy rather than the tunnel handle, because the tunnel is
+// connected lazily and is still nil before the first dial; falling through to
+// the direct dial then would leak the real IP.
+func (t *HTTP3Transport) dialFunc() func(ctx context.Context, addr string, tlsCfg *tls.Config, cfg *quic.Config) (*quic.Conn, error) {
+	switch {
+	case t.masqueConn != nil:
+		return t.dialQUICWithMASQUE
+	case t.usesUDPProxy:
+		return t.dialQUICWithProxy
+	default:
+		return t.dialQUIC
 	}
+}
 
-	// Match the key log writer selection used by the direct probe / dial path.
-	var keyLogWriter io.Writer
-	if t.config != nil && t.config.KeyLogWriter != nil {
-		keyLogWriter = t.config.KeyLogWriter
-	} else {
-		keyLogWriter = GetKeyLogWriter()
+// dialAhead dials host:port the way the http3 transport dials it for a
+// request: the same dial function, given the TLS and QUIC configs that
+// http3.Transport.dial would pass, so the connection is one a request can go
+// out on. It returns once the handshake has finished, even when a 0-RTT dial
+// hands the connection back before the server has answered: auto mode's race
+// asks whether QUIC reaches the server, and only a finished handshake says it
+// does. addr is the address the http3 transport will dial for the request.
+func (t *HTTP3Transport) dialAhead(ctx context.Context, host, port string) (addr string, conn *quic.Conn, err error) {
+	addr = h3DialAddr(host, port)
+	tlsCfg := t.tlsConfig.Clone()
+	if tlsCfg.ServerName == "" {
+		tlsCfg.ServerName, _, _ = net.SplitHostPort(addr)
 	}
+	tlsCfg.NextProtos = []string{http3.NextProtoH3}
 
-	// SNI = request host, h3 ALPN. dialQUICWithMASQUE clones this and overrides
-	// ServerName; dialQUICWithProxy clones t.tlsConfig and ignores this. Both
-	// build their own quic.Config, so the cfg arg is unused (pass nil).
-	tlsCfg := &tls.Config{
-		ServerName:         host,
-		NextProtos:         []string{"h3"},
-		InsecureSkipVerify: t.insecureSkipVerify,
-		KeyLogWriter:       keyLogWriter,
-	}
-	t.tlsVerify.Apply(tlsCfg)
-
-	conn, err := dialFunc(ctx, net.JoinHostPort(host, port), tlsCfg, nil)
-	if err != nil {
-		// A handshake rejection here usually means stale ECH (CDN key rotation);
-		// drop the cached config so the next probe refetches.
-		if isECHRejectionError(err) {
-			t.invalidateECHConfig(host)
+	conn, err = t.dialFunc()(ctx, addr, tlsCfg, t.quicConfig)
+	if err == nil {
+		select {
+		case <-conn.HandshakeComplete():
+			return addr, conn, nil
+		case <-conn.Context().Done():
+			err = context.Cause(conn.Context())
+		case <-ctx.Done():
+			t.dropConn(conn)
+			err = ctx.Err()
 		}
-		return fmt.Errorf("QUIC dial via proxy failed: %w", err)
 	}
+	// A handshake rejection here usually means a stale ECH config (CDN key
+	// rotation); drop it so the next dial refetches.
+	if isECHRejectionError(err) {
+		t.invalidateECHConfig(host)
+	}
+	return "", nil, fmt.Errorf("QUIC dial failed: %w", err)
+}
 
-	// Probe only: tear down so the real request dials its own connection. The
-	// per-connection cleanup goroutine in the dial func removes proxy state.
-	_ = conn.CloseWithError(0, "connect probe")
+// errRaceDecided is what an HTTP/3 attempt reports when it connects after the
+// protocol race has been decided without it.
+var errRaceDecided = errors.New("http3: protocol race already decided")
+
+// h3Race is the HTTP/3 side of auto mode's protocol race for one origin. When
+// HTTP/3 wins, the request goes out on the connection it made, as Chrome sends
+// a request on the session its QUIC job made: HttpStreamFactory::Job::
+// DoCreateStream builds the QuicHttpStream from the job's own session handle.
+// When HTTP/3 loses and its handshake still finishes, the connection is
+// dropped without a word to the server.
+type h3Race struct {
+	t          *HTTP3Transport
+	host, port string
+
+	mu   sync.Mutex
+	addr string
+	conn *quic.Conn
+	lost bool
+}
+
+func (t *HTTP3Transport) newRace(host, port string) *h3Race {
+	return &h3Race{t: t, host: host, port: port}
+}
+
+// connect is the race's HTTP/3 attempt.
+func (r *h3Race) connect(ctx context.Context) error {
+	addr, conn, err := r.t.dialAhead(ctx, r.host, r.port)
+	if err != nil {
+		return err
+	}
+	r.mu.Lock()
+	lost := r.lost
+	if !lost {
+		r.addr, r.conn = addr, conn
+	}
+	r.mu.Unlock()
+	if lost {
+		r.t.dropConn(conn)
+		return errRaceDecided
+	}
 	return nil
+}
+
+// won keeps the connection for the request's dial. Call release once the
+// request has gone out: it drops the connection if the request went out on
+// another one instead.
+func (r *h3Race) won() (release func()) {
+	r.mu.Lock()
+	addr, conn := r.addr, r.conn
+	r.conn = nil
+	r.mu.Unlock()
+	if conn == nil {
+		return func() {}
+	}
+	r.t.park(addr, conn)
+	return func() { r.t.unpark(addr, conn) }
+}
+
+// lose drops the connection: now, if the attempt has connected, or as soon as
+// it does.
+func (r *h3Race) lose() {
+	r.mu.Lock()
+	r.lost = true
+	conn := r.conn
+	r.conn = nil
+	r.mu.Unlock()
+	if conn != nil {
+		r.t.dropConn(conn)
+	}
 }
 
 // Stats returns transport statistics
