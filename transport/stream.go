@@ -168,6 +168,9 @@ func (t *Transport) DoStream(ctx context.Context, req *Request) (*StreamResponse
 	if err != nil {
 		return nil, NewRequestError("parse_url", "", "", "", err)
 	}
+	if err := checkInitiator(req.Initiator); err != nil {
+		return nil, err
+	}
 
 	// Snapshot the mutable fields once so a concurrent SetProxy/SetPreset/
 	// SetProtocol can't race the dispatch below (see transportSnapshot).
@@ -434,7 +437,7 @@ func (t *Transport) doStreamHTTP1(ctx context.Context, req *Request) (*StreamRes
 	}
 
 	// Set preset headers
-	applyPresetHeaders(httpReq, t.wireHeaders(snap.preset), t.effectiveHeaderOrder(req), t.getCustomPseudoOrder(), effectiveTLSOnly, "h1", req.Headers, req.DisableClientHints, req.ExactHeaders, req.RedirectHop)
+	applyPresetHeaders(httpReq, t.wireHeaders(snap.preset), t.effectiveHeaderOrder(req), t.getCustomPseudoOrder(), effectiveTLSOnly, "h1", req.Headers, req.DisableClientHints, req.ExactHeaders, shapeOf(req))
 
 	mergeCallerHeaders(httpReq, req, "h1")
 	stripH1Priority(httpReq, req, snap.preset, effectiveTLSOnly)
@@ -535,7 +538,7 @@ func (t *Transport) doStreamHTTP2(ctx context.Context, req *Request) (*StreamRes
 	}
 
 	// Set preset headers
-	applyPresetHeaders(httpReq, t.wireHeaders(snap.preset), t.effectiveHeaderOrder(req), t.getCustomPseudoOrder(), effectiveTLSOnly, "h2", req.Headers, req.DisableClientHints, req.ExactHeaders, req.RedirectHop)
+	applyPresetHeaders(httpReq, t.wireHeaders(snap.preset), t.effectiveHeaderOrder(req), t.getCustomPseudoOrder(), effectiveTLSOnly, "h2", req.Headers, req.DisableClientHints, req.ExactHeaders, shapeOf(req))
 
 	mergeCallerHeaders(httpReq, req, "h2")
 
@@ -637,7 +640,7 @@ func (t *Transport) doStreamHTTP3(ctx context.Context, req *Request) (*StreamRes
 	}
 
 	// Set preset headers
-	applyPresetHeaders(httpReq, t.wireHeaders(snap.preset), t.effectiveHeaderOrder(req), t.getCustomPseudoOrder(), effectiveTLSOnly, "h3", req.Headers, req.DisableClientHints, req.ExactHeaders, req.RedirectHop)
+	applyPresetHeaders(httpReq, t.wireHeaders(snap.preset), t.effectiveHeaderOrder(req), t.getCustomPseudoOrder(), effectiveTLSOnly, "h3", req.Headers, req.DisableClientHints, req.ExactHeaders, shapeOf(req))
 
 	mergeCallerHeaders(httpReq, req, "h3")
 

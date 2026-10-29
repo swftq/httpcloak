@@ -327,7 +327,27 @@ type Request struct {
 	// it never fires there. It runs on the calling goroutine between hops, so it
 	// must not block and must not re-enter the same session.
 	OnRedirect func(*Redirect) error
+
+	// Initiator names the page API the request stands for: InitiatorFetch for
+	// a fetch(), InitiatorXHR for an XMLHttpRequest. Either makes the request a
+	// CORS call (sec-fetch-mode cors, sec-fetch-dest empty) unless you set
+	// those headers yourself. Leave it empty and the session decides from the
+	// request's shape, as before, sending any CORS call as a fetch().
+	//
+	// Browsers send the two differently and nothing in the headers tells them
+	// apart. Firefox sends an XMLHttpRequest with no priority header, and on
+	// its first hop with Referer after Connection, where a fetch() has it right
+	// after Accept-Encoding. Presets that say nothing about XMLHttpRequest send
+	// one like a fetch(). Any other value fails the request. Session only: the
+	// Client path ignores it.
+	Initiator string
 }
+
+// Values for Request.Initiator.
+const (
+	InitiatorFetch = transport.InitiatorFetch
+	InitiatorXHR   = transport.InitiatorXHR
+)
 
 // RedirectInfo contains information about a redirect response
 type RedirectInfo struct {
@@ -1246,6 +1266,7 @@ func (s *Session) Do(ctx context.Context, req *Request) (*Response, error) {
 		DisableHighEntropyClientHints: req.DisableHighEntropyClientHints,
 		DisableRedirectReferer:        req.DisableRedirectReferer,
 		HeaderOrder:                   req.HeaderOrder,
+		Initiator:                     req.Initiator,
 		OnRedirect:                    req.OnRedirect,
 		Timeout:                       req.Timeout,
 	}
@@ -1280,6 +1301,7 @@ func (s *Session) DoWithBody(ctx context.Context, req *Request, bodyReader io.Re
 		DisableHighEntropyClientHints: req.DisableHighEntropyClientHints,
 		DisableRedirectReferer:        req.DisableRedirectReferer,
 		HeaderOrder:                   req.HeaderOrder,
+		Initiator:                     req.Initiator,
 		OnRedirect:                    req.OnRedirect,
 		Timeout:                       req.Timeout,
 	}
@@ -1697,6 +1719,7 @@ func (s *Session) DoStream(ctx context.Context, req *Request) (*StreamResponse, 
 		DisableHighEntropyClientHints: req.DisableHighEntropyClientHints,
 		DisableRedirectReferer:        req.DisableRedirectReferer,
 		HeaderOrder:                   req.HeaderOrder,
+		Initiator:                     req.Initiator,
 		Timeout:                       req.Timeout,
 	}
 

@@ -433,7 +433,7 @@ public sealed class Session : IDisposable
     /// <param name="cookies">Cookies to send with this request</param>
     /// <param name="auth">Basic auth (username, password). If null, uses session Auth.</param>
     /// <param name="timeout">Request timeout in seconds</param>
-    public Response Get(string url, Dictionary<string, string>? headers = null, IEnumerable<KeyValuePair<string, string>>? parameters = null, Dictionary<string, string>? cookies = null, (string, string)? auth = null, int? timeout = null, string? fetchMode = null, bool? allowRedirects = null, bool disableConditionalCache = false, bool disableClientHints = false, bool disableHighEntropyClientHints = false, bool disableRedirectReferer = false, IEnumerable<KeyValuePair<string, string>>? exactHeaders = null, IEnumerable<string>? headerOrder = null)
+    public Response Get(string url, Dictionary<string, string>? headers = null, IEnumerable<KeyValuePair<string, string>>? parameters = null, Dictionary<string, string>? cookies = null, (string, string)? auth = null, int? timeout = null, string? fetchMode = null, bool? allowRedirects = null, bool disableConditionalCache = false, bool disableClientHints = false, bool disableHighEntropyClientHints = false, bool disableRedirectReferer = false, IEnumerable<KeyValuePair<string, string>>? exactHeaders = null, IEnumerable<string>? headerOrder = null, string? initiator = null)
     {
         ThrowIfDisposed();
 
@@ -445,10 +445,10 @@ public sealed class Session : IDisposable
         // exact_headers field, so a caller asking for one takes the generic path
         // rather than having it dropped in silence.
         if (timeout != null || exactHeaders != null)
-            return Request("GET", url, null, headers, timeout, auth, fetchMode: fetchMode, allowRedirects: allowRedirects, disableConditionalCache: disableConditionalCache, disableClientHints: disableClientHints, disableHighEntropyClientHints: disableHighEntropyClientHints, disableRedirectReferer: disableRedirectReferer, exactHeaders: exactHeaders, headerOrder: headerOrder);
+            return Request("GET", url, null, headers, timeout, auth, fetchMode: fetchMode, allowRedirects: allowRedirects, disableConditionalCache: disableConditionalCache, disableClientHints: disableClientHints, disableHighEntropyClientHints: disableHighEntropyClientHints, disableRedirectReferer: disableRedirectReferer, exactHeaders: exactHeaders, headerOrder: headerOrder, initiator: initiator);
 
         // Wrap headers in RequestOptions as expected by clib
-        bool hasOptions = headers.Count > 0 || fetchMode != null || allowRedirects != null || disableConditionalCache || disableClientHints || disableHighEntropyClientHints || disableRedirectReferer;
+        bool hasOptions = headers.Count > 0 || fetchMode != null || allowRedirects != null || disableConditionalCache || disableClientHints || disableHighEntropyClientHints || disableRedirectReferer || initiator != null;
         string? optionsJson = hasOptions
             ? JsonSerializer.Serialize(new RequestOptions {
                 Headers = headers.Count > 0 ? headers : null,
@@ -458,6 +458,7 @@ public sealed class Session : IDisposable
                 DisableClientHints = disableClientHints,
                 DisableHighEntropyClientHints = disableHighEntropyClientHints,
                 DisableRedirectReferer = disableRedirectReferer,
+                Initiator = initiator,
             }, JsonContext.Relaxed.RequestOptions)
             : null;
 
@@ -481,7 +482,7 @@ public sealed class Session : IDisposable
     /// <param name="cookies">Cookies to send with this request</param>
     /// <param name="auth">Basic auth (username, password). If null, uses session Auth.</param>
     /// <param name="timeout">Request timeout in seconds</param>
-    public Response Post(string url, string? body = null, Dictionary<string, string>? headers = null, IEnumerable<KeyValuePair<string, string>>? parameters = null, Dictionary<string, string>? cookies = null, (string, string)? auth = null, int? timeout = null, string? fetchMode = null, bool? allowRedirects = null, bool disableConditionalCache = false, bool disableClientHints = false, bool disableHighEntropyClientHints = false, bool disableRedirectReferer = false, IEnumerable<KeyValuePair<string, string>>? exactHeaders = null, IEnumerable<string>? headerOrder = null)
+    public Response Post(string url, string? body = null, Dictionary<string, string>? headers = null, IEnumerable<KeyValuePair<string, string>>? parameters = null, Dictionary<string, string>? cookies = null, (string, string)? auth = null, int? timeout = null, string? fetchMode = null, bool? allowRedirects = null, bool disableConditionalCache = false, bool disableClientHints = false, bool disableHighEntropyClientHints = false, bool disableRedirectReferer = false, IEnumerable<KeyValuePair<string, string>>? exactHeaders = null, IEnumerable<string>? headerOrder = null, string? initiator = null)
     {
         ThrowIfDisposed();
 
@@ -494,10 +495,10 @@ public sealed class Session : IDisposable
         // exact_headers field, so a caller asking for one takes the generic path
         // rather than having it dropped in silence.
         if (timeout != null || exactHeaders != null)
-            return Request("POST", url, body, headers, timeout, auth, fetchMode: fetchMode, allowRedirects: allowRedirects, disableConditionalCache: disableConditionalCache, disableClientHints: disableClientHints, disableHighEntropyClientHints: disableHighEntropyClientHints, disableRedirectReferer: disableRedirectReferer, exactHeaders: exactHeaders, headerOrder: headerOrder);
+            return Request("POST", url, body, headers, timeout, auth, fetchMode: fetchMode, allowRedirects: allowRedirects, disableConditionalCache: disableConditionalCache, disableClientHints: disableClientHints, disableHighEntropyClientHints: disableHighEntropyClientHints, disableRedirectReferer: disableRedirectReferer, exactHeaders: exactHeaders, headerOrder: headerOrder, initiator: initiator);
 
         // Wrap headers in RequestOptions as expected by clib
-        bool hasOptions = headers.Count > 0 || fetchMode != null || allowRedirects != null || disableConditionalCache || disableClientHints || disableHighEntropyClientHints || disableRedirectReferer;
+        bool hasOptions = headers.Count > 0 || fetchMode != null || allowRedirects != null || disableConditionalCache || disableClientHints || disableHighEntropyClientHints || disableRedirectReferer || initiator != null;
         string? optionsJson = hasOptions
             ? JsonSerializer.Serialize(new RequestOptions {
                 Headers = headers.Count > 0 ? headers : null,
@@ -507,6 +508,7 @@ public sealed class Session : IDisposable
                 DisableClientHints = disableClientHints,
                 DisableHighEntropyClientHints = disableHighEntropyClientHints,
                 DisableRedirectReferer = disableRedirectReferer,
+                Initiator = initiator,
             }, JsonContext.Relaxed.RequestOptions)
             : null;
 
@@ -547,14 +549,14 @@ public sealed class Session : IDisposable
     /// <param name="cookies">Cookies to send with this request</param>
     /// <param name="auth">Basic auth (username, password). If null, uses session Auth.</param>
     /// <param name="timeout">Request timeout in seconds</param>
-    public Response PostJson<T>(string url, T data, Dictionary<string, string>? headers = null, IEnumerable<KeyValuePair<string, string>>? parameters = null, Dictionary<string, string>? cookies = null, (string, string)? auth = null, int? timeout = null, string? fetchMode = null, bool? allowRedirects = null, bool disableConditionalCache = false, bool disableClientHints = false, bool disableHighEntropyClientHints = false, bool disableRedirectReferer = false, IEnumerable<KeyValuePair<string, string>>? exactHeaders = null, IEnumerable<string>? headerOrder = null)
+    public Response PostJson<T>(string url, T data, Dictionary<string, string>? headers = null, IEnumerable<KeyValuePair<string, string>>? parameters = null, Dictionary<string, string>? cookies = null, (string, string)? auth = null, int? timeout = null, string? fetchMode = null, bool? allowRedirects = null, bool disableConditionalCache = false, bool disableClientHints = false, bool disableHighEntropyClientHints = false, bool disableRedirectReferer = false, IEnumerable<KeyValuePair<string, string>>? exactHeaders = null, IEnumerable<string>? headerOrder = null, string? initiator = null)
     {
         headers ??= new Dictionary<string, string>();
         if (!headers.ContainsKey("Content-Type"))
             headers["Content-Type"] = "application/json";
 
         string body = JsonSerializer.Serialize(data, _relaxedJsonOptions);
-        return Post(url, body, headers, parameters, cookies, auth, timeout, fetchMode, allowRedirects, disableConditionalCache, disableClientHints, disableHighEntropyClientHints, disableRedirectReferer, exactHeaders, headerOrder);
+        return Post(url, body, headers, parameters, cookies, auth, timeout, fetchMode, allowRedirects, disableConditionalCache, disableClientHints, disableHighEntropyClientHints, disableRedirectReferer, exactHeaders, headerOrder, initiator: initiator);
     }
 
     /// <summary>
@@ -625,7 +627,7 @@ public sealed class Session : IDisposable
     /// <param name="auth">Basic auth (username, password). If null, uses session Auth.</param>
     /// <param name="parameters">Query parameters</param>
     /// <param name="cookies">Cookies to send with this request</param>
-    public Response Request(string method, string url, string? body = null, Dictionary<string, string>? headers = null, int? timeout = null, (string, string)? auth = null, IEnumerable<KeyValuePair<string, string>>? parameters = null, Dictionary<string, string>? cookies = null, string? fetchMode = null, bool? allowRedirects = null, bool disableConditionalCache = false, bool disableClientHints = false, bool disableHighEntropyClientHints = false, bool disableRedirectReferer = false, IEnumerable<KeyValuePair<string, string>>? exactHeaders = null, IEnumerable<string>? headerOrder = null)
+    public Response Request(string method, string url, string? body = null, Dictionary<string, string>? headers = null, int? timeout = null, (string, string)? auth = null, IEnumerable<KeyValuePair<string, string>>? parameters = null, Dictionary<string, string>? cookies = null, string? fetchMode = null, bool? allowRedirects = null, bool disableConditionalCache = false, bool disableClientHints = false, bool disableHighEntropyClientHints = false, bool disableRedirectReferer = false, IEnumerable<KeyValuePair<string, string>>? exactHeaders = null, IEnumerable<string>? headerOrder = null, string? initiator = null)
     {
         ThrowIfDisposed();
 
@@ -650,6 +652,7 @@ public sealed class Session : IDisposable
             DisableClientHints = disableClientHints,
             DisableHighEntropyClientHints = disableHighEntropyClientHints,
             DisableRedirectReferer = disableRedirectReferer,
+            Initiator = initiator,
             ExactHeaders = BuildExactHeaders(exactHeaders),
             HeaderOrder = headerOrder?.ToList(),
         };
@@ -692,20 +695,20 @@ public sealed class Session : IDisposable
     /// <param name="cookies">Cookies to send with this request</param>
     /// <param name="auth">Basic auth (username, password). If null, uses session Auth.</param>
     /// <param name="timeout">Request timeout in seconds</param>
-    public Response Put(string url, string? body = null, Dictionary<string, string>? headers = null, IEnumerable<KeyValuePair<string, string>>? parameters = null, Dictionary<string, string>? cookies = null, (string, string)? auth = null, int? timeout = null, string? fetchMode = null, bool? allowRedirects = null, bool disableConditionalCache = false, bool disableClientHints = false, bool disableHighEntropyClientHints = false, bool disableRedirectReferer = false, IEnumerable<KeyValuePair<string, string>>? exactHeaders = null, IEnumerable<string>? headerOrder = null)
-        => Request("PUT", url, body, headers, timeout, auth, parameters, cookies, fetchMode, allowRedirects, disableConditionalCache, disableClientHints, disableHighEntropyClientHints, disableRedirectReferer, exactHeaders, headerOrder);
+    public Response Put(string url, string? body = null, Dictionary<string, string>? headers = null, IEnumerable<KeyValuePair<string, string>>? parameters = null, Dictionary<string, string>? cookies = null, (string, string)? auth = null, int? timeout = null, string? fetchMode = null, bool? allowRedirects = null, bool disableConditionalCache = false, bool disableClientHints = false, bool disableHighEntropyClientHints = false, bool disableRedirectReferer = false, IEnumerable<KeyValuePair<string, string>>? exactHeaders = null, IEnumerable<string>? headerOrder = null, string? initiator = null)
+        => Request("PUT", url, body, headers, timeout, auth, parameters, cookies, fetchMode, allowRedirects, disableConditionalCache, disableClientHints, disableHighEntropyClientHints, disableRedirectReferer, exactHeaders, headerOrder, initiator: initiator);
 
     /// <summary>
     /// Perform a PUT request with JSON body.
     /// </summary>
-    public Response PutJson<T>(string url, T data, Dictionary<string, string>? headers = null, IEnumerable<KeyValuePair<string, string>>? parameters = null, Dictionary<string, string>? cookies = null, (string, string)? auth = null, int? timeout = null, string? fetchMode = null, bool? allowRedirects = null, bool disableConditionalCache = false, bool disableClientHints = false, bool disableHighEntropyClientHints = false, bool disableRedirectReferer = false, IEnumerable<KeyValuePair<string, string>>? exactHeaders = null, IEnumerable<string>? headerOrder = null)
+    public Response PutJson<T>(string url, T data, Dictionary<string, string>? headers = null, IEnumerable<KeyValuePair<string, string>>? parameters = null, Dictionary<string, string>? cookies = null, (string, string)? auth = null, int? timeout = null, string? fetchMode = null, bool? allowRedirects = null, bool disableConditionalCache = false, bool disableClientHints = false, bool disableHighEntropyClientHints = false, bool disableRedirectReferer = false, IEnumerable<KeyValuePair<string, string>>? exactHeaders = null, IEnumerable<string>? headerOrder = null, string? initiator = null)
     {
         headers ??= new Dictionary<string, string>();
         if (!headers.ContainsKey("Content-Type"))
             headers["Content-Type"] = "application/json";
 
         string body = JsonSerializer.Serialize(data, _relaxedJsonOptions);
-        return Put(url, body, headers, parameters, cookies, auth, timeout, fetchMode, allowRedirects, disableConditionalCache, disableClientHints, disableHighEntropyClientHints, disableRedirectReferer, exactHeaders, headerOrder);
+        return Put(url, body, headers, parameters, cookies, auth, timeout, fetchMode, allowRedirects, disableConditionalCache, disableClientHints, disableHighEntropyClientHints, disableRedirectReferer, exactHeaders, headerOrder, initiator: initiator);
     }
 
     /// <summary>
@@ -717,8 +720,8 @@ public sealed class Session : IDisposable
     /// <param name="cookies">Cookies to send with this request</param>
     /// <param name="auth">Basic auth (username, password). If null, uses session Auth.</param>
     /// <param name="timeout">Request timeout in seconds</param>
-    public Response Delete(string url, Dictionary<string, string>? headers = null, IEnumerable<KeyValuePair<string, string>>? parameters = null, Dictionary<string, string>? cookies = null, (string, string)? auth = null, int? timeout = null, string? fetchMode = null, bool? allowRedirects = null, bool disableConditionalCache = false, bool disableClientHints = false, bool disableHighEntropyClientHints = false, bool disableRedirectReferer = false, IEnumerable<KeyValuePair<string, string>>? exactHeaders = null, IEnumerable<string>? headerOrder = null)
-        => Request("DELETE", url, null, headers, timeout, auth, parameters, cookies, fetchMode, allowRedirects, disableConditionalCache, disableClientHints, disableHighEntropyClientHints, disableRedirectReferer, exactHeaders, headerOrder);
+    public Response Delete(string url, Dictionary<string, string>? headers = null, IEnumerable<KeyValuePair<string, string>>? parameters = null, Dictionary<string, string>? cookies = null, (string, string)? auth = null, int? timeout = null, string? fetchMode = null, bool? allowRedirects = null, bool disableConditionalCache = false, bool disableClientHints = false, bool disableHighEntropyClientHints = false, bool disableRedirectReferer = false, IEnumerable<KeyValuePair<string, string>>? exactHeaders = null, IEnumerable<string>? headerOrder = null, string? initiator = null)
+        => Request("DELETE", url, null, headers, timeout, auth, parameters, cookies, fetchMode, allowRedirects, disableConditionalCache, disableClientHints, disableHighEntropyClientHints, disableRedirectReferer, exactHeaders, headerOrder, initiator: initiator);
 
     /// <summary>
     /// Perform a PATCH request.
@@ -730,20 +733,20 @@ public sealed class Session : IDisposable
     /// <param name="cookies">Cookies to send with this request</param>
     /// <param name="auth">Basic auth (username, password). If null, uses session Auth.</param>
     /// <param name="timeout">Request timeout in seconds</param>
-    public Response Patch(string url, string? body = null, Dictionary<string, string>? headers = null, IEnumerable<KeyValuePair<string, string>>? parameters = null, Dictionary<string, string>? cookies = null, (string, string)? auth = null, int? timeout = null, string? fetchMode = null, bool? allowRedirects = null, bool disableConditionalCache = false, bool disableClientHints = false, bool disableHighEntropyClientHints = false, bool disableRedirectReferer = false, IEnumerable<KeyValuePair<string, string>>? exactHeaders = null, IEnumerable<string>? headerOrder = null)
-        => Request("PATCH", url, body, headers, timeout, auth, parameters, cookies, fetchMode, allowRedirects, disableConditionalCache, disableClientHints, disableHighEntropyClientHints, disableRedirectReferer, exactHeaders, headerOrder);
+    public Response Patch(string url, string? body = null, Dictionary<string, string>? headers = null, IEnumerable<KeyValuePair<string, string>>? parameters = null, Dictionary<string, string>? cookies = null, (string, string)? auth = null, int? timeout = null, string? fetchMode = null, bool? allowRedirects = null, bool disableConditionalCache = false, bool disableClientHints = false, bool disableHighEntropyClientHints = false, bool disableRedirectReferer = false, IEnumerable<KeyValuePair<string, string>>? exactHeaders = null, IEnumerable<string>? headerOrder = null, string? initiator = null)
+        => Request("PATCH", url, body, headers, timeout, auth, parameters, cookies, fetchMode, allowRedirects, disableConditionalCache, disableClientHints, disableHighEntropyClientHints, disableRedirectReferer, exactHeaders, headerOrder, initiator: initiator);
 
     /// <summary>
     /// Perform a PATCH request with JSON body.
     /// </summary>
-    public Response PatchJson<T>(string url, T data, Dictionary<string, string>? headers = null, IEnumerable<KeyValuePair<string, string>>? parameters = null, Dictionary<string, string>? cookies = null, (string, string)? auth = null, int? timeout = null, string? fetchMode = null, bool? allowRedirects = null, bool disableConditionalCache = false, bool disableClientHints = false, bool disableHighEntropyClientHints = false, bool disableRedirectReferer = false, IEnumerable<KeyValuePair<string, string>>? exactHeaders = null, IEnumerable<string>? headerOrder = null)
+    public Response PatchJson<T>(string url, T data, Dictionary<string, string>? headers = null, IEnumerable<KeyValuePair<string, string>>? parameters = null, Dictionary<string, string>? cookies = null, (string, string)? auth = null, int? timeout = null, string? fetchMode = null, bool? allowRedirects = null, bool disableConditionalCache = false, bool disableClientHints = false, bool disableHighEntropyClientHints = false, bool disableRedirectReferer = false, IEnumerable<KeyValuePair<string, string>>? exactHeaders = null, IEnumerable<string>? headerOrder = null, string? initiator = null)
     {
         headers ??= new Dictionary<string, string>();
         if (!headers.ContainsKey("Content-Type"))
             headers["Content-Type"] = "application/json";
 
         string body = JsonSerializer.Serialize(data, _relaxedJsonOptions);
-        return Patch(url, body, headers, parameters, cookies, auth, timeout, fetchMode, allowRedirects, disableConditionalCache, disableClientHints, disableHighEntropyClientHints, disableRedirectReferer, exactHeaders, headerOrder);
+        return Patch(url, body, headers, parameters, cookies, auth, timeout, fetchMode, allowRedirects, disableConditionalCache, disableClientHints, disableHighEntropyClientHints, disableRedirectReferer, exactHeaders, headerOrder, initiator: initiator);
     }
 
     /// <summary>
@@ -755,8 +758,8 @@ public sealed class Session : IDisposable
     /// <param name="cookies">Cookies to send with this request</param>
     /// <param name="auth">Basic auth (username, password). If null, uses session Auth.</param>
     /// <param name="timeout">Request timeout in seconds</param>
-    public Response Head(string url, Dictionary<string, string>? headers = null, IEnumerable<KeyValuePair<string, string>>? parameters = null, Dictionary<string, string>? cookies = null, (string, string)? auth = null, int? timeout = null, string? fetchMode = null, bool? allowRedirects = null, bool disableConditionalCache = false, bool disableClientHints = false, bool disableHighEntropyClientHints = false, bool disableRedirectReferer = false, IEnumerable<KeyValuePair<string, string>>? exactHeaders = null, IEnumerable<string>? headerOrder = null)
-        => Request("HEAD", url, null, headers, timeout, auth, parameters, cookies, fetchMode, allowRedirects, disableConditionalCache, disableClientHints, disableHighEntropyClientHints, disableRedirectReferer, exactHeaders, headerOrder);
+    public Response Head(string url, Dictionary<string, string>? headers = null, IEnumerable<KeyValuePair<string, string>>? parameters = null, Dictionary<string, string>? cookies = null, (string, string)? auth = null, int? timeout = null, string? fetchMode = null, bool? allowRedirects = null, bool disableConditionalCache = false, bool disableClientHints = false, bool disableHighEntropyClientHints = false, bool disableRedirectReferer = false, IEnumerable<KeyValuePair<string, string>>? exactHeaders = null, IEnumerable<string>? headerOrder = null, string? initiator = null)
+        => Request("HEAD", url, null, headers, timeout, auth, parameters, cookies, fetchMode, allowRedirects, disableConditionalCache, disableClientHints, disableHighEntropyClientHints, disableRedirectReferer, exactHeaders, headerOrder, initiator: initiator);
 
     /// <summary>
     /// Perform an OPTIONS request.
@@ -767,8 +770,8 @@ public sealed class Session : IDisposable
     /// <param name="cookies">Cookies to send with this request</param>
     /// <param name="auth">Basic auth (username, password). If null, uses session Auth.</param>
     /// <param name="timeout">Request timeout in seconds</param>
-    public Response Options(string url, Dictionary<string, string>? headers = null, IEnumerable<KeyValuePair<string, string>>? parameters = null, Dictionary<string, string>? cookies = null, (string, string)? auth = null, int? timeout = null, string? fetchMode = null, bool? allowRedirects = null, bool disableConditionalCache = false, bool disableClientHints = false, bool disableHighEntropyClientHints = false, bool disableRedirectReferer = false, IEnumerable<KeyValuePair<string, string>>? exactHeaders = null, IEnumerable<string>? headerOrder = null)
-        => Request("OPTIONS", url, null, headers, timeout, auth, parameters, cookies, fetchMode, allowRedirects, disableConditionalCache, disableClientHints, disableHighEntropyClientHints, disableRedirectReferer, exactHeaders, headerOrder);
+    public Response Options(string url, Dictionary<string, string>? headers = null, IEnumerable<KeyValuePair<string, string>>? parameters = null, Dictionary<string, string>? cookies = null, (string, string)? auth = null, int? timeout = null, string? fetchMode = null, bool? allowRedirects = null, bool disableConditionalCache = false, bool disableClientHints = false, bool disableHighEntropyClientHints = false, bool disableRedirectReferer = false, IEnumerable<KeyValuePair<string, string>>? exactHeaders = null, IEnumerable<string>? headerOrder = null, string? initiator = null)
+        => Request("OPTIONS", url, null, headers, timeout, auth, parameters, cookies, fetchMode, allowRedirects, disableConditionalCache, disableClientHints, disableHighEntropyClientHints, disableRedirectReferer, exactHeaders, headerOrder, initiator: initiator);
 
     // =========================================================================
     // Binary Body Methods (for uploads)
@@ -784,20 +787,20 @@ public sealed class Session : IDisposable
     /// <param name="cookies">Cookies to send with this request</param>
     /// <param name="auth">Basic auth (username, password). If null, uses session Auth.</param>
     /// <param name="timeout">Request timeout in seconds</param>
-    public Response Post(string url, byte[] body, Dictionary<string, string>? headers = null, IEnumerable<KeyValuePair<string, string>>? parameters = null, Dictionary<string, string>? cookies = null, (string, string)? auth = null, int? timeout = null, string? fetchMode = null, bool? allowRedirects = null, bool disableConditionalCache = false, bool disableClientHints = false, bool disableHighEntropyClientHints = false, bool disableRedirectReferer = false, IEnumerable<KeyValuePair<string, string>>? exactHeaders = null, IEnumerable<string>? headerOrder = null)
-        => RequestBinary("POST", url, body, headers, timeout, auth, parameters, cookies, fetchMode, allowRedirects, disableConditionalCache, disableClientHints, disableHighEntropyClientHints, disableRedirectReferer, exactHeaders, headerOrder);
+    public Response Post(string url, byte[] body, Dictionary<string, string>? headers = null, IEnumerable<KeyValuePair<string, string>>? parameters = null, Dictionary<string, string>? cookies = null, (string, string)? auth = null, int? timeout = null, string? fetchMode = null, bool? allowRedirects = null, bool disableConditionalCache = false, bool disableClientHints = false, bool disableHighEntropyClientHints = false, bool disableRedirectReferer = false, IEnumerable<KeyValuePair<string, string>>? exactHeaders = null, IEnumerable<string>? headerOrder = null, string? initiator = null)
+        => RequestBinary("POST", url, body, headers, timeout, auth, parameters, cookies, fetchMode, allowRedirects, disableConditionalCache, disableClientHints, disableHighEntropyClientHints, disableRedirectReferer, exactHeaders, headerOrder, initiator: initiator);
 
     /// <summary>
     /// Perform a PUT request with binary body.
     /// </summary>
-    public Response Put(string url, byte[] body, Dictionary<string, string>? headers = null, IEnumerable<KeyValuePair<string, string>>? parameters = null, Dictionary<string, string>? cookies = null, (string, string)? auth = null, int? timeout = null, string? fetchMode = null, bool? allowRedirects = null, bool disableConditionalCache = false, bool disableClientHints = false, bool disableHighEntropyClientHints = false, bool disableRedirectReferer = false, IEnumerable<KeyValuePair<string, string>>? exactHeaders = null, IEnumerable<string>? headerOrder = null)
-        => RequestBinary("PUT", url, body, headers, timeout, auth, parameters, cookies, fetchMode, allowRedirects, disableConditionalCache, disableClientHints, disableHighEntropyClientHints, disableRedirectReferer, exactHeaders, headerOrder);
+    public Response Put(string url, byte[] body, Dictionary<string, string>? headers = null, IEnumerable<KeyValuePair<string, string>>? parameters = null, Dictionary<string, string>? cookies = null, (string, string)? auth = null, int? timeout = null, string? fetchMode = null, bool? allowRedirects = null, bool disableConditionalCache = false, bool disableClientHints = false, bool disableHighEntropyClientHints = false, bool disableRedirectReferer = false, IEnumerable<KeyValuePair<string, string>>? exactHeaders = null, IEnumerable<string>? headerOrder = null, string? initiator = null)
+        => RequestBinary("PUT", url, body, headers, timeout, auth, parameters, cookies, fetchMode, allowRedirects, disableConditionalCache, disableClientHints, disableHighEntropyClientHints, disableRedirectReferer, exactHeaders, headerOrder, initiator: initiator);
 
     /// <summary>
     /// Perform a PATCH request with binary body.
     /// </summary>
-    public Response Patch(string url, byte[] body, Dictionary<string, string>? headers = null, IEnumerable<KeyValuePair<string, string>>? parameters = null, Dictionary<string, string>? cookies = null, (string, string)? auth = null, int? timeout = null, string? fetchMode = null, bool? allowRedirects = null, bool disableConditionalCache = false, bool disableClientHints = false, bool disableHighEntropyClientHints = false, bool disableRedirectReferer = false, IEnumerable<KeyValuePair<string, string>>? exactHeaders = null, IEnumerable<string>? headerOrder = null)
-        => RequestBinary("PATCH", url, body, headers, timeout, auth, parameters, cookies, fetchMode, allowRedirects, disableConditionalCache, disableClientHints, disableHighEntropyClientHints, disableRedirectReferer, exactHeaders, headerOrder);
+    public Response Patch(string url, byte[] body, Dictionary<string, string>? headers = null, IEnumerable<KeyValuePair<string, string>>? parameters = null, Dictionary<string, string>? cookies = null, (string, string)? auth = null, int? timeout = null, string? fetchMode = null, bool? allowRedirects = null, bool disableConditionalCache = false, bool disableClientHints = false, bool disableHighEntropyClientHints = false, bool disableRedirectReferer = false, IEnumerable<KeyValuePair<string, string>>? exactHeaders = null, IEnumerable<string>? headerOrder = null, string? initiator = null)
+        => RequestBinary("PATCH", url, body, headers, timeout, auth, parameters, cookies, fetchMode, allowRedirects, disableConditionalCache, disableClientHints, disableHighEntropyClientHints, disableRedirectReferer, exactHeaders, headerOrder, initiator: initiator);
 
     /// <summary>
     /// Perform a POST request with Stream body.
@@ -810,27 +813,27 @@ public sealed class Session : IDisposable
     /// <param name="cookies">Cookies to send with this request</param>
     /// <param name="auth">Basic auth (username, password). If null, uses session Auth.</param>
     /// <param name="timeout">Request timeout in seconds</param>
-    public Response Post(string url, Stream bodyStream, Dictionary<string, string>? headers = null, IEnumerable<KeyValuePair<string, string>>? parameters = null, Dictionary<string, string>? cookies = null, (string, string)? auth = null, int? timeout = null, string? fetchMode = null, bool? allowRedirects = null, bool disableConditionalCache = false, bool disableClientHints = false, bool disableHighEntropyClientHints = false, bool disableRedirectReferer = false, IEnumerable<KeyValuePair<string, string>>? exactHeaders = null, IEnumerable<string>? headerOrder = null)
-        => RequestStream("POST", url, bodyStream, headers, timeout, auth, parameters, cookies, fetchMode, allowRedirects, disableConditionalCache, disableClientHints, disableHighEntropyClientHints, disableRedirectReferer, exactHeaders, headerOrder);
+    public Response Post(string url, Stream bodyStream, Dictionary<string, string>? headers = null, IEnumerable<KeyValuePair<string, string>>? parameters = null, Dictionary<string, string>? cookies = null, (string, string)? auth = null, int? timeout = null, string? fetchMode = null, bool? allowRedirects = null, bool disableConditionalCache = false, bool disableClientHints = false, bool disableHighEntropyClientHints = false, bool disableRedirectReferer = false, IEnumerable<KeyValuePair<string, string>>? exactHeaders = null, IEnumerable<string>? headerOrder = null, string? initiator = null)
+        => RequestStream("POST", url, bodyStream, headers, timeout, auth, parameters, cookies, fetchMode, allowRedirects, disableConditionalCache, disableClientHints, disableHighEntropyClientHints, disableRedirectReferer, exactHeaders, headerOrder, initiator: initiator);
 
     /// <summary>
     /// Perform a PUT request with Stream body.
     /// Note: The entire stream is read into memory before sending.
     /// </summary>
-    public Response Put(string url, Stream bodyStream, Dictionary<string, string>? headers = null, IEnumerable<KeyValuePair<string, string>>? parameters = null, Dictionary<string, string>? cookies = null, (string, string)? auth = null, int? timeout = null, string? fetchMode = null, bool? allowRedirects = null, bool disableConditionalCache = false, bool disableClientHints = false, bool disableHighEntropyClientHints = false, bool disableRedirectReferer = false, IEnumerable<KeyValuePair<string, string>>? exactHeaders = null, IEnumerable<string>? headerOrder = null)
-        => RequestStream("PUT", url, bodyStream, headers, timeout, auth, parameters, cookies, fetchMode, allowRedirects, disableConditionalCache, disableClientHints, disableHighEntropyClientHints, disableRedirectReferer, exactHeaders, headerOrder);
+    public Response Put(string url, Stream bodyStream, Dictionary<string, string>? headers = null, IEnumerable<KeyValuePair<string, string>>? parameters = null, Dictionary<string, string>? cookies = null, (string, string)? auth = null, int? timeout = null, string? fetchMode = null, bool? allowRedirects = null, bool disableConditionalCache = false, bool disableClientHints = false, bool disableHighEntropyClientHints = false, bool disableRedirectReferer = false, IEnumerable<KeyValuePair<string, string>>? exactHeaders = null, IEnumerable<string>? headerOrder = null, string? initiator = null)
+        => RequestStream("PUT", url, bodyStream, headers, timeout, auth, parameters, cookies, fetchMode, allowRedirects, disableConditionalCache, disableClientHints, disableHighEntropyClientHints, disableRedirectReferer, exactHeaders, headerOrder, initiator: initiator);
 
     /// <summary>
     /// Perform a PATCH request with Stream body.
     /// Note: The entire stream is read into memory before sending.
     /// </summary>
-    public Response Patch(string url, Stream bodyStream, Dictionary<string, string>? headers = null, IEnumerable<KeyValuePair<string, string>>? parameters = null, Dictionary<string, string>? cookies = null, (string, string)? auth = null, int? timeout = null, string? fetchMode = null, bool? allowRedirects = null, bool disableConditionalCache = false, bool disableClientHints = false, bool disableHighEntropyClientHints = false, bool disableRedirectReferer = false, IEnumerable<KeyValuePair<string, string>>? exactHeaders = null, IEnumerable<string>? headerOrder = null)
-        => RequestStream("PATCH", url, bodyStream, headers, timeout, auth, parameters, cookies, fetchMode, allowRedirects, disableConditionalCache, disableClientHints, disableHighEntropyClientHints, disableRedirectReferer, exactHeaders, headerOrder);
+    public Response Patch(string url, Stream bodyStream, Dictionary<string, string>? headers = null, IEnumerable<KeyValuePair<string, string>>? parameters = null, Dictionary<string, string>? cookies = null, (string, string)? auth = null, int? timeout = null, string? fetchMode = null, bool? allowRedirects = null, bool disableConditionalCache = false, bool disableClientHints = false, bool disableHighEntropyClientHints = false, bool disableRedirectReferer = false, IEnumerable<KeyValuePair<string, string>>? exactHeaders = null, IEnumerable<string>? headerOrder = null, string? initiator = null)
+        => RequestStream("PATCH", url, bodyStream, headers, timeout, auth, parameters, cookies, fetchMode, allowRedirects, disableConditionalCache, disableClientHints, disableHighEntropyClientHints, disableRedirectReferer, exactHeaders, headerOrder, initiator: initiator);
 
     /// <summary>
     /// Perform a custom HTTP request with binary body.
     /// </summary>
-    public Response RequestBinary(string method, string url, byte[] body, Dictionary<string, string>? headers = null, int? timeout = null, (string, string)? auth = null, IEnumerable<KeyValuePair<string, string>>? parameters = null, Dictionary<string, string>? cookies = null, string? fetchMode = null, bool? allowRedirects = null, bool disableConditionalCache = false, bool disableClientHints = false, bool disableHighEntropyClientHints = false, bool disableRedirectReferer = false, IEnumerable<KeyValuePair<string, string>>? exactHeaders = null, IEnumerable<string>? headerOrder = null)
+    public Response RequestBinary(string method, string url, byte[] body, Dictionary<string, string>? headers = null, int? timeout = null, (string, string)? auth = null, IEnumerable<KeyValuePair<string, string>>? parameters = null, Dictionary<string, string>? cookies = null, string? fetchMode = null, bool? allowRedirects = null, bool disableConditionalCache = false, bool disableClientHints = false, bool disableHighEntropyClientHints = false, bool disableRedirectReferer = false, IEnumerable<KeyValuePair<string, string>>? exactHeaders = null, IEnumerable<string>? headerOrder = null, string? initiator = null)
     {
         ThrowIfDisposed();
 
@@ -854,6 +857,7 @@ public sealed class Session : IDisposable
             DisableClientHints = disableClientHints,
             DisableHighEntropyClientHints = disableHighEntropyClientHints,
             DisableRedirectReferer = disableRedirectReferer,
+            Initiator = initiator,
             ExactHeaders = BuildExactHeaders(exactHeaders),
             HeaderOrder = headerOrder?.ToList(),
         };
@@ -889,11 +893,11 @@ public sealed class Session : IDisposable
     /// Perform a custom HTTP request with Stream body.
     /// Note: The entire stream is read into memory before sending.
     /// </summary>
-    public Response RequestStream(string method, string url, Stream bodyStream, Dictionary<string, string>? headers = null, int? timeout = null, (string, string)? auth = null, IEnumerable<KeyValuePair<string, string>>? parameters = null, Dictionary<string, string>? cookies = null, string? fetchMode = null, bool? allowRedirects = null, bool disableConditionalCache = false, bool disableClientHints = false, bool disableHighEntropyClientHints = false, bool disableRedirectReferer = false, IEnumerable<KeyValuePair<string, string>>? exactHeaders = null, IEnumerable<string>? headerOrder = null)
+    public Response RequestStream(string method, string url, Stream bodyStream, Dictionary<string, string>? headers = null, int? timeout = null, (string, string)? auth = null, IEnumerable<KeyValuePair<string, string>>? parameters = null, Dictionary<string, string>? cookies = null, string? fetchMode = null, bool? allowRedirects = null, bool disableConditionalCache = false, bool disableClientHints = false, bool disableHighEntropyClientHints = false, bool disableRedirectReferer = false, IEnumerable<KeyValuePair<string, string>>? exactHeaders = null, IEnumerable<string>? headerOrder = null, string? initiator = null)
     {
         using var ms = new MemoryStream();
         bodyStream.CopyTo(ms);
-        return RequestBinary(method, url, ms.ToArray(), headers, timeout, auth, parameters, cookies, fetchMode, allowRedirects, disableConditionalCache, disableClientHints, disableHighEntropyClientHints, disableRedirectReferer, exactHeaders, headerOrder);
+        return RequestBinary(method, url, ms.ToArray(), headers, timeout, auth, parameters, cookies, fetchMode, allowRedirects, disableConditionalCache, disableClientHints, disableHighEntropyClientHints, disableRedirectReferer, exactHeaders, headerOrder, initiator: initiator);
     }
 
     // =========================================================================
@@ -909,7 +913,7 @@ public sealed class Session : IDisposable
     /// <param name="cookies">Cookies to send with this request</param>
     /// <param name="auth">Basic auth (username, password). If null, uses session Auth.</param>
     /// <param name="timeout">Request timeout in seconds</param>
-    public Task<Response> GetAsync(string url, Dictionary<string, string>? headers = null, IEnumerable<KeyValuePair<string, string>>? parameters = null, Dictionary<string, string>? cookies = null, (string, string)? auth = null, int? timeout = null, CancellationToken cancellationToken = default, string? fetchMode = null, bool? allowRedirects = null, bool disableConditionalCache = false, bool disableClientHints = false, bool disableHighEntropyClientHints = false, bool disableRedirectReferer = false, IEnumerable<KeyValuePair<string, string>>? exactHeaders = null, IEnumerable<string>? headerOrder = null)
+    public Task<Response> GetAsync(string url, Dictionary<string, string>? headers = null, IEnumerable<KeyValuePair<string, string>>? parameters = null, Dictionary<string, string>? cookies = null, (string, string)? auth = null, int? timeout = null, CancellationToken cancellationToken = default, string? fetchMode = null, bool? allowRedirects = null, bool disableConditionalCache = false, bool disableClientHints = false, bool disableHighEntropyClientHints = false, bool disableRedirectReferer = false, IEnumerable<KeyValuePair<string, string>>? exactHeaders = null, IEnumerable<string>? headerOrder = null, string? initiator = null)
     {
         ThrowIfDisposed();
         if (cancellationToken.IsCancellationRequested)
@@ -923,7 +927,7 @@ public sealed class Session : IDisposable
         // exact_headers field, so a caller asking for one takes the generic path
         // rather than having it dropped in silence.
         if (timeout != null || exactHeaders != null)
-            return RequestAsync("GET", url, null, headers, timeout, null, null, null, cancellationToken, fetchMode, allowRedirects, disableConditionalCache, disableClientHints, disableHighEntropyClientHints, disableRedirectReferer, exactHeaders, headerOrder);
+            return RequestAsync("GET", url, null, headers, timeout, null, null, null, cancellationToken, fetchMode, allowRedirects, disableConditionalCache, disableClientHints, disableHighEntropyClientHints, disableRedirectReferer, exactHeaders, headerOrder, initiator: initiator);
 
         // Wrap headers in RequestOptions structure (Go expects {"headers": {...}, "timeout": ...})
         var options = new RequestOptions {
@@ -934,6 +938,7 @@ public sealed class Session : IDisposable
             DisableClientHints = disableClientHints,
             DisableHighEntropyClientHints = disableHighEntropyClientHints,
             DisableRedirectReferer = disableRedirectReferer,
+            Initiator = initiator,
         };
         bool hasOptions = options.Headers != null || options.FetchMode != null || options.FollowRedirects != null || options.DisableConditionalCache || options.DisableClientHints || options.DisableHighEntropyClientHints || options.DisableRedirectReferer;
         string? optionsJson = hasOptions
@@ -957,7 +962,7 @@ public sealed class Session : IDisposable
     /// <param name="cookies">Cookies to send with this request</param>
     /// <param name="auth">Basic auth (username, password). If null, uses session Auth.</param>
     /// <param name="timeout">Request timeout in seconds</param>
-    public Task<Response> PostAsync(string url, string? body = null, Dictionary<string, string>? headers = null, IEnumerable<KeyValuePair<string, string>>? parameters = null, Dictionary<string, string>? cookies = null, (string, string)? auth = null, int? timeout = null, CancellationToken cancellationToken = default, string? fetchMode = null, bool? allowRedirects = null, bool disableConditionalCache = false, bool disableClientHints = false, bool disableHighEntropyClientHints = false, bool disableRedirectReferer = false, IEnumerable<KeyValuePair<string, string>>? exactHeaders = null, IEnumerable<string>? headerOrder = null)
+    public Task<Response> PostAsync(string url, string? body = null, Dictionary<string, string>? headers = null, IEnumerable<KeyValuePair<string, string>>? parameters = null, Dictionary<string, string>? cookies = null, (string, string)? auth = null, int? timeout = null, CancellationToken cancellationToken = default, string? fetchMode = null, bool? allowRedirects = null, bool disableConditionalCache = false, bool disableClientHints = false, bool disableHighEntropyClientHints = false, bool disableRedirectReferer = false, IEnumerable<KeyValuePair<string, string>>? exactHeaders = null, IEnumerable<string>? headerOrder = null, string? initiator = null)
     {
         ThrowIfDisposed();
         if (cancellationToken.IsCancellationRequested)
@@ -972,7 +977,7 @@ public sealed class Session : IDisposable
         // exact_headers field, so a caller asking for one takes the generic path
         // rather than having it dropped in silence.
         if (timeout != null || exactHeaders != null)
-            return RequestAsync("POST", url, body, headers, timeout, null, null, null, cancellationToken, fetchMode, allowRedirects, disableConditionalCache, disableClientHints, disableHighEntropyClientHints, disableRedirectReferer, exactHeaders, headerOrder);
+            return RequestAsync("POST", url, body, headers, timeout, null, null, null, cancellationToken, fetchMode, allowRedirects, disableConditionalCache, disableClientHints, disableHighEntropyClientHints, disableRedirectReferer, exactHeaders, headerOrder, initiator: initiator);
 
         // The body is passed to PostAsync as a separate C string, which the native
         // side reads via C.GoString — that stops at the first NUL, silently
@@ -996,6 +1001,7 @@ public sealed class Session : IDisposable
             DisableClientHints = disableClientHints,
             DisableHighEntropyClientHints = disableHighEntropyClientHints,
             DisableRedirectReferer = disableRedirectReferer,
+            Initiator = initiator,
             BodyEncoding = bodyEncoding,
         };
         bool hasOptions = options.Headers != null || options.FetchMode != null || options.FollowRedirects != null || options.DisableConditionalCache || options.DisableClientHints || options.DisableHighEntropyClientHints || options.DisableRedirectReferer || options.BodyEncoding != null;
@@ -1013,14 +1019,14 @@ public sealed class Session : IDisposable
     /// <summary>
     /// Perform an async POST request with JSON body using native Go goroutines.
     /// </summary>
-    public Task<Response> PostJsonAsync<T>(string url, T data, Dictionary<string, string>? headers = null, IEnumerable<KeyValuePair<string, string>>? parameters = null, Dictionary<string, string>? cookies = null, (string, string)? auth = null, int? timeout = null, CancellationToken cancellationToken = default, string? fetchMode = null, bool? allowRedirects = null, bool disableConditionalCache = false, bool disableClientHints = false, bool disableHighEntropyClientHints = false, bool disableRedirectReferer = false, IEnumerable<KeyValuePair<string, string>>? exactHeaders = null, IEnumerable<string>? headerOrder = null)
+    public Task<Response> PostJsonAsync<T>(string url, T data, Dictionary<string, string>? headers = null, IEnumerable<KeyValuePair<string, string>>? parameters = null, Dictionary<string, string>? cookies = null, (string, string)? auth = null, int? timeout = null, CancellationToken cancellationToken = default, string? fetchMode = null, bool? allowRedirects = null, bool disableConditionalCache = false, bool disableClientHints = false, bool disableHighEntropyClientHints = false, bool disableRedirectReferer = false, IEnumerable<KeyValuePair<string, string>>? exactHeaders = null, IEnumerable<string>? headerOrder = null, string? initiator = null)
     {
         headers ??= new Dictionary<string, string>();
         if (!headers.ContainsKey("Content-Type"))
             headers["Content-Type"] = "application/json";
 
         string body = JsonSerializer.Serialize(data, _relaxedJsonOptions);
-        return PostAsync(url, body, headers, parameters, cookies, auth, timeout, cancellationToken, fetchMode, allowRedirects, disableConditionalCache, disableClientHints, disableHighEntropyClientHints, disableRedirectReferer, exactHeaders, headerOrder);
+        return PostAsync(url, body, headers, parameters, cookies, auth, timeout, cancellationToken, fetchMode, allowRedirects, disableConditionalCache, disableClientHints, disableHighEntropyClientHints, disableRedirectReferer, exactHeaders, headerOrder, initiator: initiator);
     }
 
     /// <summary>
@@ -1047,7 +1053,7 @@ public sealed class Session : IDisposable
     /// <param name="auth">Basic auth (username, password). If null, uses session Auth.</param>
     /// <param name="parameters">Query parameters</param>
     /// <param name="cookies">Cookies to send with this request</param>
-    public Task<Response> RequestAsync(string method, string url, string? body = null, Dictionary<string, string>? headers = null, int? timeout = null, (string, string)? auth = null, IEnumerable<KeyValuePair<string, string>>? parameters = null, Dictionary<string, string>? cookies = null, CancellationToken cancellationToken = default, string? fetchMode = null, bool? allowRedirects = null, bool disableConditionalCache = false, bool disableClientHints = false, bool disableHighEntropyClientHints = false, bool disableRedirectReferer = false, IEnumerable<KeyValuePair<string, string>>? exactHeaders = null, IEnumerable<string>? headerOrder = null)
+    public Task<Response> RequestAsync(string method, string url, string? body = null, Dictionary<string, string>? headers = null, int? timeout = null, (string, string)? auth = null, IEnumerable<KeyValuePair<string, string>>? parameters = null, Dictionary<string, string>? cookies = null, CancellationToken cancellationToken = default, string? fetchMode = null, bool? allowRedirects = null, bool disableConditionalCache = false, bool disableClientHints = false, bool disableHighEntropyClientHints = false, bool disableRedirectReferer = false, IEnumerable<KeyValuePair<string, string>>? exactHeaders = null, IEnumerable<string>? headerOrder = null, string? initiator = null)
     {
         ThrowIfDisposed();
         if (cancellationToken.IsCancellationRequested)
@@ -1071,6 +1077,7 @@ public sealed class Session : IDisposable
             DisableClientHints = disableClientHints,
             DisableHighEntropyClientHints = disableHighEntropyClientHints,
             DisableRedirectReferer = disableRedirectReferer,
+            Initiator = initiator,
             ExactHeaders = BuildExactHeaders(exactHeaders),
             HeaderOrder = headerOrder?.ToList(),
         };
@@ -1087,58 +1094,58 @@ public sealed class Session : IDisposable
     /// <summary>
     /// Perform an async PUT request using native Go goroutines.
     /// </summary>
-    public Task<Response> PutAsync(string url, string? body = null, Dictionary<string, string>? headers = null, IEnumerable<KeyValuePair<string, string>>? parameters = null, Dictionary<string, string>? cookies = null, (string, string)? auth = null, int? timeout = null, CancellationToken cancellationToken = default, string? fetchMode = null, bool? allowRedirects = null, bool disableConditionalCache = false, bool disableClientHints = false, bool disableHighEntropyClientHints = false, bool disableRedirectReferer = false, IEnumerable<KeyValuePair<string, string>>? exactHeaders = null, IEnumerable<string>? headerOrder = null)
-        => RequestAsync("PUT", url, body, headers, timeout, auth, parameters, cookies, cancellationToken, fetchMode, allowRedirects, disableConditionalCache, disableClientHints, disableHighEntropyClientHints, disableRedirectReferer, exactHeaders, headerOrder);
+    public Task<Response> PutAsync(string url, string? body = null, Dictionary<string, string>? headers = null, IEnumerable<KeyValuePair<string, string>>? parameters = null, Dictionary<string, string>? cookies = null, (string, string)? auth = null, int? timeout = null, CancellationToken cancellationToken = default, string? fetchMode = null, bool? allowRedirects = null, bool disableConditionalCache = false, bool disableClientHints = false, bool disableHighEntropyClientHints = false, bool disableRedirectReferer = false, IEnumerable<KeyValuePair<string, string>>? exactHeaders = null, IEnumerable<string>? headerOrder = null, string? initiator = null)
+        => RequestAsync("PUT", url, body, headers, timeout, auth, parameters, cookies, cancellationToken, fetchMode, allowRedirects, disableConditionalCache, disableClientHints, disableHighEntropyClientHints, disableRedirectReferer, exactHeaders, headerOrder, initiator: initiator);
 
     /// <summary>
     /// Perform an async PUT request with JSON body using native Go goroutines.
     /// </summary>
-    public Task<Response> PutJsonAsync<T>(string url, T data, Dictionary<string, string>? headers = null, IEnumerable<KeyValuePair<string, string>>? parameters = null, Dictionary<string, string>? cookies = null, (string, string)? auth = null, int? timeout = null, CancellationToken cancellationToken = default, string? fetchMode = null, bool? allowRedirects = null, bool disableConditionalCache = false, bool disableClientHints = false, bool disableHighEntropyClientHints = false, bool disableRedirectReferer = false, IEnumerable<KeyValuePair<string, string>>? exactHeaders = null, IEnumerable<string>? headerOrder = null)
+    public Task<Response> PutJsonAsync<T>(string url, T data, Dictionary<string, string>? headers = null, IEnumerable<KeyValuePair<string, string>>? parameters = null, Dictionary<string, string>? cookies = null, (string, string)? auth = null, int? timeout = null, CancellationToken cancellationToken = default, string? fetchMode = null, bool? allowRedirects = null, bool disableConditionalCache = false, bool disableClientHints = false, bool disableHighEntropyClientHints = false, bool disableRedirectReferer = false, IEnumerable<KeyValuePair<string, string>>? exactHeaders = null, IEnumerable<string>? headerOrder = null, string? initiator = null)
     {
         headers ??= new Dictionary<string, string>();
         if (!headers.ContainsKey("Content-Type"))
             headers["Content-Type"] = "application/json";
 
         string body = JsonSerializer.Serialize(data, _relaxedJsonOptions);
-        return PutAsync(url, body, headers, parameters, cookies, auth, timeout, cancellationToken, fetchMode, allowRedirects, disableConditionalCache, disableClientHints, disableHighEntropyClientHints, disableRedirectReferer, exactHeaders, headerOrder);
+        return PutAsync(url, body, headers, parameters, cookies, auth, timeout, cancellationToken, fetchMode, allowRedirects, disableConditionalCache, disableClientHints, disableHighEntropyClientHints, disableRedirectReferer, exactHeaders, headerOrder, initiator: initiator);
     }
 
     /// <summary>
     /// Perform an async DELETE request using native Go goroutines.
     /// </summary>
-    public Task<Response> DeleteAsync(string url, Dictionary<string, string>? headers = null, IEnumerable<KeyValuePair<string, string>>? parameters = null, Dictionary<string, string>? cookies = null, (string, string)? auth = null, int? timeout = null, CancellationToken cancellationToken = default, string? fetchMode = null, bool? allowRedirects = null, bool disableConditionalCache = false, bool disableClientHints = false, bool disableHighEntropyClientHints = false, bool disableRedirectReferer = false, IEnumerable<KeyValuePair<string, string>>? exactHeaders = null, IEnumerable<string>? headerOrder = null)
-        => RequestAsync("DELETE", url, null, headers, timeout, auth, parameters, cookies, cancellationToken, fetchMode, allowRedirects, disableConditionalCache, disableClientHints, disableHighEntropyClientHints, disableRedirectReferer, exactHeaders, headerOrder);
+    public Task<Response> DeleteAsync(string url, Dictionary<string, string>? headers = null, IEnumerable<KeyValuePair<string, string>>? parameters = null, Dictionary<string, string>? cookies = null, (string, string)? auth = null, int? timeout = null, CancellationToken cancellationToken = default, string? fetchMode = null, bool? allowRedirects = null, bool disableConditionalCache = false, bool disableClientHints = false, bool disableHighEntropyClientHints = false, bool disableRedirectReferer = false, IEnumerable<KeyValuePair<string, string>>? exactHeaders = null, IEnumerable<string>? headerOrder = null, string? initiator = null)
+        => RequestAsync("DELETE", url, null, headers, timeout, auth, parameters, cookies, cancellationToken, fetchMode, allowRedirects, disableConditionalCache, disableClientHints, disableHighEntropyClientHints, disableRedirectReferer, exactHeaders, headerOrder, initiator: initiator);
 
     /// <summary>
     /// Perform an async PATCH request using native Go goroutines.
     /// </summary>
-    public Task<Response> PatchAsync(string url, string? body = null, Dictionary<string, string>? headers = null, IEnumerable<KeyValuePair<string, string>>? parameters = null, Dictionary<string, string>? cookies = null, (string, string)? auth = null, int? timeout = null, CancellationToken cancellationToken = default, string? fetchMode = null, bool? allowRedirects = null, bool disableConditionalCache = false, bool disableClientHints = false, bool disableHighEntropyClientHints = false, bool disableRedirectReferer = false, IEnumerable<KeyValuePair<string, string>>? exactHeaders = null, IEnumerable<string>? headerOrder = null)
-        => RequestAsync("PATCH", url, body, headers, timeout, auth, parameters, cookies, cancellationToken, fetchMode, allowRedirects, disableConditionalCache, disableClientHints, disableHighEntropyClientHints, disableRedirectReferer, exactHeaders, headerOrder);
+    public Task<Response> PatchAsync(string url, string? body = null, Dictionary<string, string>? headers = null, IEnumerable<KeyValuePair<string, string>>? parameters = null, Dictionary<string, string>? cookies = null, (string, string)? auth = null, int? timeout = null, CancellationToken cancellationToken = default, string? fetchMode = null, bool? allowRedirects = null, bool disableConditionalCache = false, bool disableClientHints = false, bool disableHighEntropyClientHints = false, bool disableRedirectReferer = false, IEnumerable<KeyValuePair<string, string>>? exactHeaders = null, IEnumerable<string>? headerOrder = null, string? initiator = null)
+        => RequestAsync("PATCH", url, body, headers, timeout, auth, parameters, cookies, cancellationToken, fetchMode, allowRedirects, disableConditionalCache, disableClientHints, disableHighEntropyClientHints, disableRedirectReferer, exactHeaders, headerOrder, initiator: initiator);
 
     /// <summary>
     /// Perform an async PATCH request with JSON body using native Go goroutines.
     /// </summary>
-    public Task<Response> PatchJsonAsync<T>(string url, T data, Dictionary<string, string>? headers = null, IEnumerable<KeyValuePair<string, string>>? parameters = null, Dictionary<string, string>? cookies = null, (string, string)? auth = null, int? timeout = null, CancellationToken cancellationToken = default, string? fetchMode = null, bool? allowRedirects = null, bool disableConditionalCache = false, bool disableClientHints = false, bool disableHighEntropyClientHints = false, bool disableRedirectReferer = false, IEnumerable<KeyValuePair<string, string>>? exactHeaders = null, IEnumerable<string>? headerOrder = null)
+    public Task<Response> PatchJsonAsync<T>(string url, T data, Dictionary<string, string>? headers = null, IEnumerable<KeyValuePair<string, string>>? parameters = null, Dictionary<string, string>? cookies = null, (string, string)? auth = null, int? timeout = null, CancellationToken cancellationToken = default, string? fetchMode = null, bool? allowRedirects = null, bool disableConditionalCache = false, bool disableClientHints = false, bool disableHighEntropyClientHints = false, bool disableRedirectReferer = false, IEnumerable<KeyValuePair<string, string>>? exactHeaders = null, IEnumerable<string>? headerOrder = null, string? initiator = null)
     {
         headers ??= new Dictionary<string, string>();
         if (!headers.ContainsKey("Content-Type"))
             headers["Content-Type"] = "application/json";
 
         string body = JsonSerializer.Serialize(data, _relaxedJsonOptions);
-        return PatchAsync(url, body, headers, parameters, cookies, auth, timeout, cancellationToken, fetchMode, allowRedirects, disableConditionalCache, disableClientHints, disableHighEntropyClientHints, disableRedirectReferer, exactHeaders, headerOrder);
+        return PatchAsync(url, body, headers, parameters, cookies, auth, timeout, cancellationToken, fetchMode, allowRedirects, disableConditionalCache, disableClientHints, disableHighEntropyClientHints, disableRedirectReferer, exactHeaders, headerOrder, initiator: initiator);
     }
 
     /// <summary>
     /// Perform an async HEAD request using native Go goroutines.
     /// </summary>
-    public Task<Response> HeadAsync(string url, Dictionary<string, string>? headers = null, IEnumerable<KeyValuePair<string, string>>? parameters = null, Dictionary<string, string>? cookies = null, (string, string)? auth = null, int? timeout = null, CancellationToken cancellationToken = default, string? fetchMode = null, bool? allowRedirects = null, bool disableConditionalCache = false, bool disableClientHints = false, bool disableHighEntropyClientHints = false, bool disableRedirectReferer = false, IEnumerable<KeyValuePair<string, string>>? exactHeaders = null, IEnumerable<string>? headerOrder = null)
-        => RequestAsync("HEAD", url, null, headers, timeout, auth, parameters, cookies, cancellationToken, fetchMode, allowRedirects, disableConditionalCache, disableClientHints, disableHighEntropyClientHints, disableRedirectReferer, exactHeaders, headerOrder);
+    public Task<Response> HeadAsync(string url, Dictionary<string, string>? headers = null, IEnumerable<KeyValuePair<string, string>>? parameters = null, Dictionary<string, string>? cookies = null, (string, string)? auth = null, int? timeout = null, CancellationToken cancellationToken = default, string? fetchMode = null, bool? allowRedirects = null, bool disableConditionalCache = false, bool disableClientHints = false, bool disableHighEntropyClientHints = false, bool disableRedirectReferer = false, IEnumerable<KeyValuePair<string, string>>? exactHeaders = null, IEnumerable<string>? headerOrder = null, string? initiator = null)
+        => RequestAsync("HEAD", url, null, headers, timeout, auth, parameters, cookies, cancellationToken, fetchMode, allowRedirects, disableConditionalCache, disableClientHints, disableHighEntropyClientHints, disableRedirectReferer, exactHeaders, headerOrder, initiator: initiator);
 
     /// <summary>
     /// Perform an async OPTIONS request using native Go goroutines.
     /// </summary>
-    public Task<Response> OptionsAsync(string url, Dictionary<string, string>? headers = null, IEnumerable<KeyValuePair<string, string>>? parameters = null, Dictionary<string, string>? cookies = null, (string, string)? auth = null, int? timeout = null, CancellationToken cancellationToken = default, string? fetchMode = null, bool? allowRedirects = null, bool disableConditionalCache = false, bool disableClientHints = false, bool disableHighEntropyClientHints = false, bool disableRedirectReferer = false, IEnumerable<KeyValuePair<string, string>>? exactHeaders = null, IEnumerable<string>? headerOrder = null)
-        => RequestAsync("OPTIONS", url, null, headers, timeout, auth, parameters, cookies, cancellationToken, fetchMode, allowRedirects, disableConditionalCache, disableClientHints, disableHighEntropyClientHints, disableRedirectReferer, exactHeaders, headerOrder);
+    public Task<Response> OptionsAsync(string url, Dictionary<string, string>? headers = null, IEnumerable<KeyValuePair<string, string>>? parameters = null, Dictionary<string, string>? cookies = null, (string, string)? auth = null, int? timeout = null, CancellationToken cancellationToken = default, string? fetchMode = null, bool? allowRedirects = null, bool disableConditionalCache = false, bool disableClientHints = false, bool disableHighEntropyClientHints = false, bool disableRedirectReferer = false, IEnumerable<KeyValuePair<string, string>>? exactHeaders = null, IEnumerable<string>? headerOrder = null, string? initiator = null)
+        => RequestAsync("OPTIONS", url, null, headers, timeout, auth, parameters, cookies, cancellationToken, fetchMode, allowRedirects, disableConditionalCache, disableClientHints, disableHighEntropyClientHints, disableRedirectReferer, exactHeaders, headerOrder, initiator: initiator);
 
     // =========================================================================
     // Async binary / Stream / multipart overloads (mirror the sync byte[]+Stream
@@ -1150,7 +1157,7 @@ public sealed class Session : IDisposable
     /// <summary>
     /// Perform an async HTTP request with a binary body using native Go goroutines.
     /// </summary>
-    public Task<Response> RequestBinaryAsync(string method, string url, byte[] body, Dictionary<string, string>? headers = null, int? timeout = null, (string, string)? auth = null, IEnumerable<KeyValuePair<string, string>>? parameters = null, Dictionary<string, string>? cookies = null, CancellationToken cancellationToken = default, string? fetchMode = null, bool? allowRedirects = null, bool disableConditionalCache = false, bool disableClientHints = false, bool disableHighEntropyClientHints = false, bool disableRedirectReferer = false, IEnumerable<KeyValuePair<string, string>>? exactHeaders = null, IEnumerable<string>? headerOrder = null)
+    public Task<Response> RequestBinaryAsync(string method, string url, byte[] body, Dictionary<string, string>? headers = null, int? timeout = null, (string, string)? auth = null, IEnumerable<KeyValuePair<string, string>>? parameters = null, Dictionary<string, string>? cookies = null, CancellationToken cancellationToken = default, string? fetchMode = null, bool? allowRedirects = null, bool disableConditionalCache = false, bool disableClientHints = false, bool disableHighEntropyClientHints = false, bool disableRedirectReferer = false, IEnumerable<KeyValuePair<string, string>>? exactHeaders = null, IEnumerable<string>? headerOrder = null, string? initiator = null)
     {
         ThrowIfDisposed();
         if (cancellationToken.IsCancellationRequested)
@@ -1174,6 +1181,7 @@ public sealed class Session : IDisposable
             DisableClientHints = disableClientHints,
             DisableHighEntropyClientHints = disableHighEntropyClientHints,
             DisableRedirectReferer = disableRedirectReferer,
+            Initiator = initiator,
             ExactHeaders = BuildExactHeaders(exactHeaders),
             HeaderOrder = headerOrder?.ToList(),
         };
@@ -1192,57 +1200,57 @@ public sealed class Session : IDisposable
     /// The entire stream is read into memory before sending. For very large uploads
     /// (>50 MB) prefer the upload-state-machine API once it ships in .NET.
     /// </summary>
-    public async Task<Response> RequestStreamAsync(string method, string url, Stream bodyStream, Dictionary<string, string>? headers = null, int? timeout = null, (string, string)? auth = null, IEnumerable<KeyValuePair<string, string>>? parameters = null, Dictionary<string, string>? cookies = null, CancellationToken cancellationToken = default, string? fetchMode = null, bool? allowRedirects = null, bool disableConditionalCache = false, bool disableClientHints = false, bool disableHighEntropyClientHints = false, bool disableRedirectReferer = false, IEnumerable<KeyValuePair<string, string>>? exactHeaders = null, IEnumerable<string>? headerOrder = null)
+    public async Task<Response> RequestStreamAsync(string method, string url, Stream bodyStream, Dictionary<string, string>? headers = null, int? timeout = null, (string, string)? auth = null, IEnumerable<KeyValuePair<string, string>>? parameters = null, Dictionary<string, string>? cookies = null, CancellationToken cancellationToken = default, string? fetchMode = null, bool? allowRedirects = null, bool disableConditionalCache = false, bool disableClientHints = false, bool disableHighEntropyClientHints = false, bool disableRedirectReferer = false, IEnumerable<KeyValuePair<string, string>>? exactHeaders = null, IEnumerable<string>? headerOrder = null, string? initiator = null)
     {
         using var ms = new MemoryStream();
         await bodyStream.CopyToAsync(ms, 81920, cancellationToken).ConfigureAwait(false);
-        return await RequestBinaryAsync(method, url, ms.ToArray(), headers, timeout, auth, parameters, cookies, cancellationToken, fetchMode, allowRedirects, disableConditionalCache, disableClientHints, disableHighEntropyClientHints, disableRedirectReferer, exactHeaders, headerOrder).ConfigureAwait(false);
+        return await RequestBinaryAsync(method, url, ms.ToArray(), headers, timeout, auth, parameters, cookies, cancellationToken, fetchMode, allowRedirects, disableConditionalCache, disableClientHints, disableHighEntropyClientHints, disableRedirectReferer, exactHeaders, headerOrder, initiator: initiator).ConfigureAwait(false);
     }
 
     /// <summary>
     /// Perform an async POST request with a binary body using native Go goroutines.
     /// </summary>
-    public Task<Response> PostAsync(string url, byte[] body, Dictionary<string, string>? headers = null, IEnumerable<KeyValuePair<string, string>>? parameters = null, Dictionary<string, string>? cookies = null, (string, string)? auth = null, int? timeout = null, CancellationToken cancellationToken = default, string? fetchMode = null, bool? allowRedirects = null, bool disableConditionalCache = false, bool disableClientHints = false, bool disableHighEntropyClientHints = false, bool disableRedirectReferer = false, IEnumerable<KeyValuePair<string, string>>? exactHeaders = null, IEnumerable<string>? headerOrder = null)
-        => RequestBinaryAsync("POST", url, body, headers, timeout, auth, parameters, cookies, cancellationToken, fetchMode, allowRedirects, disableConditionalCache, disableClientHints, disableHighEntropyClientHints, disableRedirectReferer, exactHeaders, headerOrder);
+    public Task<Response> PostAsync(string url, byte[] body, Dictionary<string, string>? headers = null, IEnumerable<KeyValuePair<string, string>>? parameters = null, Dictionary<string, string>? cookies = null, (string, string)? auth = null, int? timeout = null, CancellationToken cancellationToken = default, string? fetchMode = null, bool? allowRedirects = null, bool disableConditionalCache = false, bool disableClientHints = false, bool disableHighEntropyClientHints = false, bool disableRedirectReferer = false, IEnumerable<KeyValuePair<string, string>>? exactHeaders = null, IEnumerable<string>? headerOrder = null, string? initiator = null)
+        => RequestBinaryAsync("POST", url, body, headers, timeout, auth, parameters, cookies, cancellationToken, fetchMode, allowRedirects, disableConditionalCache, disableClientHints, disableHighEntropyClientHints, disableRedirectReferer, exactHeaders, headerOrder, initiator: initiator);
 
     /// <summary>
     /// Perform an async POST request with a Stream body. The stream is read fully
     /// into memory before sending.
     /// </summary>
-    public Task<Response> PostAsync(string url, Stream bodyStream, Dictionary<string, string>? headers = null, IEnumerable<KeyValuePair<string, string>>? parameters = null, Dictionary<string, string>? cookies = null, (string, string)? auth = null, int? timeout = null, CancellationToken cancellationToken = default, string? fetchMode = null, bool? allowRedirects = null, bool disableConditionalCache = false, bool disableClientHints = false, bool disableHighEntropyClientHints = false, bool disableRedirectReferer = false, IEnumerable<KeyValuePair<string, string>>? exactHeaders = null, IEnumerable<string>? headerOrder = null)
-        => RequestStreamAsync("POST", url, bodyStream, headers, timeout, auth, parameters, cookies, cancellationToken, fetchMode, allowRedirects, disableConditionalCache, disableClientHints, disableHighEntropyClientHints, disableRedirectReferer, exactHeaders, headerOrder);
+    public Task<Response> PostAsync(string url, Stream bodyStream, Dictionary<string, string>? headers = null, IEnumerable<KeyValuePair<string, string>>? parameters = null, Dictionary<string, string>? cookies = null, (string, string)? auth = null, int? timeout = null, CancellationToken cancellationToken = default, string? fetchMode = null, bool? allowRedirects = null, bool disableConditionalCache = false, bool disableClientHints = false, bool disableHighEntropyClientHints = false, bool disableRedirectReferer = false, IEnumerable<KeyValuePair<string, string>>? exactHeaders = null, IEnumerable<string>? headerOrder = null, string? initiator = null)
+        => RequestStreamAsync("POST", url, bodyStream, headers, timeout, auth, parameters, cookies, cancellationToken, fetchMode, allowRedirects, disableConditionalCache, disableClientHints, disableHighEntropyClientHints, disableRedirectReferer, exactHeaders, headerOrder, initiator: initiator);
 
     /// <summary>
     /// Perform an async PUT request with a binary body using native Go goroutines.
     /// </summary>
-    public Task<Response> PutAsync(string url, byte[] body, Dictionary<string, string>? headers = null, IEnumerable<KeyValuePair<string, string>>? parameters = null, Dictionary<string, string>? cookies = null, (string, string)? auth = null, int? timeout = null, CancellationToken cancellationToken = default, string? fetchMode = null, bool? allowRedirects = null, bool disableConditionalCache = false, bool disableClientHints = false, bool disableHighEntropyClientHints = false, bool disableRedirectReferer = false, IEnumerable<KeyValuePair<string, string>>? exactHeaders = null, IEnumerable<string>? headerOrder = null)
-        => RequestBinaryAsync("PUT", url, body, headers, timeout, auth, parameters, cookies, cancellationToken, fetchMode, allowRedirects, disableConditionalCache, disableClientHints, disableHighEntropyClientHints, disableRedirectReferer, exactHeaders, headerOrder);
+    public Task<Response> PutAsync(string url, byte[] body, Dictionary<string, string>? headers = null, IEnumerable<KeyValuePair<string, string>>? parameters = null, Dictionary<string, string>? cookies = null, (string, string)? auth = null, int? timeout = null, CancellationToken cancellationToken = default, string? fetchMode = null, bool? allowRedirects = null, bool disableConditionalCache = false, bool disableClientHints = false, bool disableHighEntropyClientHints = false, bool disableRedirectReferer = false, IEnumerable<KeyValuePair<string, string>>? exactHeaders = null, IEnumerable<string>? headerOrder = null, string? initiator = null)
+        => RequestBinaryAsync("PUT", url, body, headers, timeout, auth, parameters, cookies, cancellationToken, fetchMode, allowRedirects, disableConditionalCache, disableClientHints, disableHighEntropyClientHints, disableRedirectReferer, exactHeaders, headerOrder, initiator: initiator);
 
     /// <summary>
     /// Perform an async PUT request with a Stream body. The stream is read fully
     /// into memory before sending.
     /// </summary>
-    public Task<Response> PutAsync(string url, Stream bodyStream, Dictionary<string, string>? headers = null, IEnumerable<KeyValuePair<string, string>>? parameters = null, Dictionary<string, string>? cookies = null, (string, string)? auth = null, int? timeout = null, CancellationToken cancellationToken = default, string? fetchMode = null, bool? allowRedirects = null, bool disableConditionalCache = false, bool disableClientHints = false, bool disableHighEntropyClientHints = false, bool disableRedirectReferer = false, IEnumerable<KeyValuePair<string, string>>? exactHeaders = null, IEnumerable<string>? headerOrder = null)
-        => RequestStreamAsync("PUT", url, bodyStream, headers, timeout, auth, parameters, cookies, cancellationToken, fetchMode, allowRedirects, disableConditionalCache, disableClientHints, disableHighEntropyClientHints, disableRedirectReferer, exactHeaders, headerOrder);
+    public Task<Response> PutAsync(string url, Stream bodyStream, Dictionary<string, string>? headers = null, IEnumerable<KeyValuePair<string, string>>? parameters = null, Dictionary<string, string>? cookies = null, (string, string)? auth = null, int? timeout = null, CancellationToken cancellationToken = default, string? fetchMode = null, bool? allowRedirects = null, bool disableConditionalCache = false, bool disableClientHints = false, bool disableHighEntropyClientHints = false, bool disableRedirectReferer = false, IEnumerable<KeyValuePair<string, string>>? exactHeaders = null, IEnumerable<string>? headerOrder = null, string? initiator = null)
+        => RequestStreamAsync("PUT", url, bodyStream, headers, timeout, auth, parameters, cookies, cancellationToken, fetchMode, allowRedirects, disableConditionalCache, disableClientHints, disableHighEntropyClientHints, disableRedirectReferer, exactHeaders, headerOrder, initiator: initiator);
 
     /// <summary>
     /// Perform an async PATCH request with a binary body using native Go goroutines.
     /// </summary>
-    public Task<Response> PatchAsync(string url, byte[] body, Dictionary<string, string>? headers = null, IEnumerable<KeyValuePair<string, string>>? parameters = null, Dictionary<string, string>? cookies = null, (string, string)? auth = null, int? timeout = null, CancellationToken cancellationToken = default, string? fetchMode = null, bool? allowRedirects = null, bool disableConditionalCache = false, bool disableClientHints = false, bool disableHighEntropyClientHints = false, bool disableRedirectReferer = false, IEnumerable<KeyValuePair<string, string>>? exactHeaders = null, IEnumerable<string>? headerOrder = null)
-        => RequestBinaryAsync("PATCH", url, body, headers, timeout, auth, parameters, cookies, cancellationToken, fetchMode, allowRedirects, disableConditionalCache, disableClientHints, disableHighEntropyClientHints, disableRedirectReferer, exactHeaders, headerOrder);
+    public Task<Response> PatchAsync(string url, byte[] body, Dictionary<string, string>? headers = null, IEnumerable<KeyValuePair<string, string>>? parameters = null, Dictionary<string, string>? cookies = null, (string, string)? auth = null, int? timeout = null, CancellationToken cancellationToken = default, string? fetchMode = null, bool? allowRedirects = null, bool disableConditionalCache = false, bool disableClientHints = false, bool disableHighEntropyClientHints = false, bool disableRedirectReferer = false, IEnumerable<KeyValuePair<string, string>>? exactHeaders = null, IEnumerable<string>? headerOrder = null, string? initiator = null)
+        => RequestBinaryAsync("PATCH", url, body, headers, timeout, auth, parameters, cookies, cancellationToken, fetchMode, allowRedirects, disableConditionalCache, disableClientHints, disableHighEntropyClientHints, disableRedirectReferer, exactHeaders, headerOrder, initiator: initiator);
 
     /// <summary>
     /// Perform an async PATCH request with a Stream body. The stream is read fully
     /// into memory before sending.
     /// </summary>
-    public Task<Response> PatchAsync(string url, Stream bodyStream, Dictionary<string, string>? headers = null, IEnumerable<KeyValuePair<string, string>>? parameters = null, Dictionary<string, string>? cookies = null, (string, string)? auth = null, int? timeout = null, CancellationToken cancellationToken = default, string? fetchMode = null, bool? allowRedirects = null, bool disableConditionalCache = false, bool disableClientHints = false, bool disableHighEntropyClientHints = false, bool disableRedirectReferer = false, IEnumerable<KeyValuePair<string, string>>? exactHeaders = null, IEnumerable<string>? headerOrder = null)
-        => RequestStreamAsync("PATCH", url, bodyStream, headers, timeout, auth, parameters, cookies, cancellationToken, fetchMode, allowRedirects, disableConditionalCache, disableClientHints, disableHighEntropyClientHints, disableRedirectReferer, exactHeaders, headerOrder);
+    public Task<Response> PatchAsync(string url, Stream bodyStream, Dictionary<string, string>? headers = null, IEnumerable<KeyValuePair<string, string>>? parameters = null, Dictionary<string, string>? cookies = null, (string, string)? auth = null, int? timeout = null, CancellationToken cancellationToken = default, string? fetchMode = null, bool? allowRedirects = null, bool disableConditionalCache = false, bool disableClientHints = false, bool disableHighEntropyClientHints = false, bool disableRedirectReferer = false, IEnumerable<KeyValuePair<string, string>>? exactHeaders = null, IEnumerable<string>? headerOrder = null, string? initiator = null)
+        => RequestStreamAsync("PATCH", url, bodyStream, headers, timeout, auth, parameters, cookies, cancellationToken, fetchMode, allowRedirects, disableConditionalCache, disableClientHints, disableHighEntropyClientHints, disableRedirectReferer, exactHeaders, headerOrder, initiator: initiator);
 
     /// <summary>
     /// Perform an async multipart POST request. Builds the multipart body in
     /// memory, then ships the bytes through RequestBinaryAsync.
     /// </summary>
-    public Task<Response> PostMultipartAsync(string url, Dictionary<string, string>? fields = null, Dictionary<string, MultipartFile>? files = null, Dictionary<string, string>? headers = null, IEnumerable<KeyValuePair<string, string>>? parameters = null, Dictionary<string, string>? cookies = null, (string Username, string Password)? auth = null, int? timeout = null, CancellationToken cancellationToken = default, string? fetchMode = null, bool? allowRedirects = null, bool disableConditionalCache = false, bool disableClientHints = false, bool disableHighEntropyClientHints = false, bool disableRedirectReferer = false, IEnumerable<KeyValuePair<string, string>>? exactHeaders = null, IEnumerable<string>? headerOrder = null)
+    public Task<Response> PostMultipartAsync(string url, Dictionary<string, string>? fields = null, Dictionary<string, MultipartFile>? files = null, Dictionary<string, string>? headers = null, IEnumerable<KeyValuePair<string, string>>? parameters = null, Dictionary<string, string>? cookies = null, (string Username, string Password)? auth = null, int? timeout = null, CancellationToken cancellationToken = default, string? fetchMode = null, bool? allowRedirects = null, bool disableConditionalCache = false, bool disableClientHints = false, bool disableHighEntropyClientHints = false, bool disableRedirectReferer = false, IEnumerable<KeyValuePair<string, string>>? exactHeaders = null, IEnumerable<string>? headerOrder = null, string? initiator = null)
     {
         var boundary = ChromeMultipartBoundary();
         var ms = new MemoryStream();
@@ -1267,7 +1275,7 @@ public sealed class Session : IDisposable
         headers["Content-Type"] = $"multipart/form-data; boundary={boundary}";
 
         (string, string)? authTuple = auth.HasValue ? (auth.Value.Username, auth.Value.Password) : ((string, string)?)null;
-        return PostAsync(url, ms.ToArray(), headers, parameters, cookies, authTuple, timeout, cancellationToken, fetchMode, allowRedirects, disableConditionalCache, disableClientHints, disableHighEntropyClientHints, disableRedirectReferer, exactHeaders, headerOrder);
+        return PostAsync(url, ms.ToArray(), headers, parameters, cookies, authTuple, timeout, cancellationToken, fetchMode, allowRedirects, disableConditionalCache, disableClientHints, disableHighEntropyClientHints, disableRedirectReferer, exactHeaders, headerOrder, initiator: initiator);
     }
 
     /// <summary>
@@ -2687,6 +2695,130 @@ public sealed class Session : IDisposable
     public Task<Response> PostMultipartAsync(string url, Dictionary<string, string>? fields, Dictionary<string, MultipartFile>? files, Dictionary<string, string>? headers, IEnumerable<KeyValuePair<string, string>>? parameters, Dictionary<string, string>? cookies, (string Username, string Password)? auth, int? timeout, CancellationToken cancellationToken, string? fetchMode, bool? allowRedirects, bool disableConditionalCache, bool disableClientHints, bool disableHighEntropyClientHints, bool disableRedirectReferer)
         => PostMultipartAsync(url, fields, files, headers, parameters, cookies, auth, timeout, cancellationToken, fetchMode, allowRedirects, disableConditionalCache, disableClientHints, disableHighEntropyClientHints, disableRedirectReferer, exactHeaders: null, headerOrder: null);
 
+    // The 1.7.3 shapes, kept for the same reason as the 1.6.8 and 1.7.0 ones.
+    //
+    // The work after 1.7.3 added initiator, the page API a request stands for,
+    // as the last parameter of every method above that takes
+    // disableRedirectReferer. A binary compiled against 1.7.3 records the shape
+    // without it.
+
+    public Response Get(string url, Dictionary<string, string>? headers, IEnumerable<KeyValuePair<string, string>>? parameters, Dictionary<string, string>? cookies, (string, string)? auth, int? timeout, string? fetchMode, bool? allowRedirects, bool disableConditionalCache, bool disableClientHints, bool disableHighEntropyClientHints, bool disableRedirectReferer, IEnumerable<KeyValuePair<string, string>>? exactHeaders, IEnumerable<string>? headerOrder)
+        => Get(url, headers, parameters, cookies, auth, timeout, fetchMode, allowRedirects, disableConditionalCache, disableClientHints, disableHighEntropyClientHints, disableRedirectReferer, exactHeaders, headerOrder, initiator: null);
+
+    public Response Post(string url, string? body, Dictionary<string, string>? headers, IEnumerable<KeyValuePair<string, string>>? parameters, Dictionary<string, string>? cookies, (string, string)? auth, int? timeout, string? fetchMode, bool? allowRedirects, bool disableConditionalCache, bool disableClientHints, bool disableHighEntropyClientHints, bool disableRedirectReferer, IEnumerable<KeyValuePair<string, string>>? exactHeaders, IEnumerable<string>? headerOrder)
+        => Post(url, body, headers, parameters, cookies, auth, timeout, fetchMode, allowRedirects, disableConditionalCache, disableClientHints, disableHighEntropyClientHints, disableRedirectReferer, exactHeaders, headerOrder, initiator: null);
+
+    public Response PostJson<T>(string url, T data, Dictionary<string, string>? headers, IEnumerable<KeyValuePair<string, string>>? parameters, Dictionary<string, string>? cookies, (string, string)? auth, int? timeout, string? fetchMode, bool? allowRedirects, bool disableConditionalCache, bool disableClientHints, bool disableHighEntropyClientHints, bool disableRedirectReferer, IEnumerable<KeyValuePair<string, string>>? exactHeaders, IEnumerable<string>? headerOrder)
+        => PostJson<T>(url, data, headers, parameters, cookies, auth, timeout, fetchMode, allowRedirects, disableConditionalCache, disableClientHints, disableHighEntropyClientHints, disableRedirectReferer, exactHeaders, headerOrder, initiator: null);
+
+    public Response Request(string method, string url, string? body, Dictionary<string, string>? headers, int? timeout, (string, string)? auth, IEnumerable<KeyValuePair<string, string>>? parameters, Dictionary<string, string>? cookies, string? fetchMode, bool? allowRedirects, bool disableConditionalCache, bool disableClientHints, bool disableHighEntropyClientHints, bool disableRedirectReferer, IEnumerable<KeyValuePair<string, string>>? exactHeaders, IEnumerable<string>? headerOrder)
+        => Request(method, url, body, headers, timeout, auth, parameters, cookies, fetchMode, allowRedirects, disableConditionalCache, disableClientHints, disableHighEntropyClientHints, disableRedirectReferer, exactHeaders, headerOrder, initiator: null);
+
+    public Response Put(string url, string? body, Dictionary<string, string>? headers, IEnumerable<KeyValuePair<string, string>>? parameters, Dictionary<string, string>? cookies, (string, string)? auth, int? timeout, string? fetchMode, bool? allowRedirects, bool disableConditionalCache, bool disableClientHints, bool disableHighEntropyClientHints, bool disableRedirectReferer, IEnumerable<KeyValuePair<string, string>>? exactHeaders, IEnumerable<string>? headerOrder)
+        => Put(url, body, headers, parameters, cookies, auth, timeout, fetchMode, allowRedirects, disableConditionalCache, disableClientHints, disableHighEntropyClientHints, disableRedirectReferer, exactHeaders, headerOrder, initiator: null);
+
+    public Response PutJson<T>(string url, T data, Dictionary<string, string>? headers, IEnumerable<KeyValuePair<string, string>>? parameters, Dictionary<string, string>? cookies, (string, string)? auth, int? timeout, string? fetchMode, bool? allowRedirects, bool disableConditionalCache, bool disableClientHints, bool disableHighEntropyClientHints, bool disableRedirectReferer, IEnumerable<KeyValuePair<string, string>>? exactHeaders, IEnumerable<string>? headerOrder)
+        => PutJson<T>(url, data, headers, parameters, cookies, auth, timeout, fetchMode, allowRedirects, disableConditionalCache, disableClientHints, disableHighEntropyClientHints, disableRedirectReferer, exactHeaders, headerOrder, initiator: null);
+
+    public Response Delete(string url, Dictionary<string, string>? headers, IEnumerable<KeyValuePair<string, string>>? parameters, Dictionary<string, string>? cookies, (string, string)? auth, int? timeout, string? fetchMode, bool? allowRedirects, bool disableConditionalCache, bool disableClientHints, bool disableHighEntropyClientHints, bool disableRedirectReferer, IEnumerable<KeyValuePair<string, string>>? exactHeaders, IEnumerable<string>? headerOrder)
+        => Delete(url, headers, parameters, cookies, auth, timeout, fetchMode, allowRedirects, disableConditionalCache, disableClientHints, disableHighEntropyClientHints, disableRedirectReferer, exactHeaders, headerOrder, initiator: null);
+
+    public Response Patch(string url, string? body, Dictionary<string, string>? headers, IEnumerable<KeyValuePair<string, string>>? parameters, Dictionary<string, string>? cookies, (string, string)? auth, int? timeout, string? fetchMode, bool? allowRedirects, bool disableConditionalCache, bool disableClientHints, bool disableHighEntropyClientHints, bool disableRedirectReferer, IEnumerable<KeyValuePair<string, string>>? exactHeaders, IEnumerable<string>? headerOrder)
+        => Patch(url, body, headers, parameters, cookies, auth, timeout, fetchMode, allowRedirects, disableConditionalCache, disableClientHints, disableHighEntropyClientHints, disableRedirectReferer, exactHeaders, headerOrder, initiator: null);
+
+    public Response PatchJson<T>(string url, T data, Dictionary<string, string>? headers, IEnumerable<KeyValuePair<string, string>>? parameters, Dictionary<string, string>? cookies, (string, string)? auth, int? timeout, string? fetchMode, bool? allowRedirects, bool disableConditionalCache, bool disableClientHints, bool disableHighEntropyClientHints, bool disableRedirectReferer, IEnumerable<KeyValuePair<string, string>>? exactHeaders, IEnumerable<string>? headerOrder)
+        => PatchJson<T>(url, data, headers, parameters, cookies, auth, timeout, fetchMode, allowRedirects, disableConditionalCache, disableClientHints, disableHighEntropyClientHints, disableRedirectReferer, exactHeaders, headerOrder, initiator: null);
+
+    public Response Head(string url, Dictionary<string, string>? headers, IEnumerable<KeyValuePair<string, string>>? parameters, Dictionary<string, string>? cookies, (string, string)? auth, int? timeout, string? fetchMode, bool? allowRedirects, bool disableConditionalCache, bool disableClientHints, bool disableHighEntropyClientHints, bool disableRedirectReferer, IEnumerable<KeyValuePair<string, string>>? exactHeaders, IEnumerable<string>? headerOrder)
+        => Head(url, headers, parameters, cookies, auth, timeout, fetchMode, allowRedirects, disableConditionalCache, disableClientHints, disableHighEntropyClientHints, disableRedirectReferer, exactHeaders, headerOrder, initiator: null);
+
+    public Response Options(string url, Dictionary<string, string>? headers, IEnumerable<KeyValuePair<string, string>>? parameters, Dictionary<string, string>? cookies, (string, string)? auth, int? timeout, string? fetchMode, bool? allowRedirects, bool disableConditionalCache, bool disableClientHints, bool disableHighEntropyClientHints, bool disableRedirectReferer, IEnumerable<KeyValuePair<string, string>>? exactHeaders, IEnumerable<string>? headerOrder)
+        => Options(url, headers, parameters, cookies, auth, timeout, fetchMode, allowRedirects, disableConditionalCache, disableClientHints, disableHighEntropyClientHints, disableRedirectReferer, exactHeaders, headerOrder, initiator: null);
+
+    public Response Post(string url, byte[] body, Dictionary<string, string>? headers, IEnumerable<KeyValuePair<string, string>>? parameters, Dictionary<string, string>? cookies, (string, string)? auth, int? timeout, string? fetchMode, bool? allowRedirects, bool disableConditionalCache, bool disableClientHints, bool disableHighEntropyClientHints, bool disableRedirectReferer, IEnumerable<KeyValuePair<string, string>>? exactHeaders, IEnumerable<string>? headerOrder)
+        => Post(url, body, headers, parameters, cookies, auth, timeout, fetchMode, allowRedirects, disableConditionalCache, disableClientHints, disableHighEntropyClientHints, disableRedirectReferer, exactHeaders, headerOrder, initiator: null);
+
+    public Response Put(string url, byte[] body, Dictionary<string, string>? headers, IEnumerable<KeyValuePair<string, string>>? parameters, Dictionary<string, string>? cookies, (string, string)? auth, int? timeout, string? fetchMode, bool? allowRedirects, bool disableConditionalCache, bool disableClientHints, bool disableHighEntropyClientHints, bool disableRedirectReferer, IEnumerable<KeyValuePair<string, string>>? exactHeaders, IEnumerable<string>? headerOrder)
+        => Put(url, body, headers, parameters, cookies, auth, timeout, fetchMode, allowRedirects, disableConditionalCache, disableClientHints, disableHighEntropyClientHints, disableRedirectReferer, exactHeaders, headerOrder, initiator: null);
+
+    public Response Patch(string url, byte[] body, Dictionary<string, string>? headers, IEnumerable<KeyValuePair<string, string>>? parameters, Dictionary<string, string>? cookies, (string, string)? auth, int? timeout, string? fetchMode, bool? allowRedirects, bool disableConditionalCache, bool disableClientHints, bool disableHighEntropyClientHints, bool disableRedirectReferer, IEnumerable<KeyValuePair<string, string>>? exactHeaders, IEnumerable<string>? headerOrder)
+        => Patch(url, body, headers, parameters, cookies, auth, timeout, fetchMode, allowRedirects, disableConditionalCache, disableClientHints, disableHighEntropyClientHints, disableRedirectReferer, exactHeaders, headerOrder, initiator: null);
+
+    public Response Post(string url, Stream bodyStream, Dictionary<string, string>? headers, IEnumerable<KeyValuePair<string, string>>? parameters, Dictionary<string, string>? cookies, (string, string)? auth, int? timeout, string? fetchMode, bool? allowRedirects, bool disableConditionalCache, bool disableClientHints, bool disableHighEntropyClientHints, bool disableRedirectReferer, IEnumerable<KeyValuePair<string, string>>? exactHeaders, IEnumerable<string>? headerOrder)
+        => Post(url, bodyStream, headers, parameters, cookies, auth, timeout, fetchMode, allowRedirects, disableConditionalCache, disableClientHints, disableHighEntropyClientHints, disableRedirectReferer, exactHeaders, headerOrder, initiator: null);
+
+    public Response Put(string url, Stream bodyStream, Dictionary<string, string>? headers, IEnumerable<KeyValuePair<string, string>>? parameters, Dictionary<string, string>? cookies, (string, string)? auth, int? timeout, string? fetchMode, bool? allowRedirects, bool disableConditionalCache, bool disableClientHints, bool disableHighEntropyClientHints, bool disableRedirectReferer, IEnumerable<KeyValuePair<string, string>>? exactHeaders, IEnumerable<string>? headerOrder)
+        => Put(url, bodyStream, headers, parameters, cookies, auth, timeout, fetchMode, allowRedirects, disableConditionalCache, disableClientHints, disableHighEntropyClientHints, disableRedirectReferer, exactHeaders, headerOrder, initiator: null);
+
+    public Response Patch(string url, Stream bodyStream, Dictionary<string, string>? headers, IEnumerable<KeyValuePair<string, string>>? parameters, Dictionary<string, string>? cookies, (string, string)? auth, int? timeout, string? fetchMode, bool? allowRedirects, bool disableConditionalCache, bool disableClientHints, bool disableHighEntropyClientHints, bool disableRedirectReferer, IEnumerable<KeyValuePair<string, string>>? exactHeaders, IEnumerable<string>? headerOrder)
+        => Patch(url, bodyStream, headers, parameters, cookies, auth, timeout, fetchMode, allowRedirects, disableConditionalCache, disableClientHints, disableHighEntropyClientHints, disableRedirectReferer, exactHeaders, headerOrder, initiator: null);
+
+    public Response RequestBinary(string method, string url, byte[] body, Dictionary<string, string>? headers, int? timeout, (string, string)? auth, IEnumerable<KeyValuePair<string, string>>? parameters, Dictionary<string, string>? cookies, string? fetchMode, bool? allowRedirects, bool disableConditionalCache, bool disableClientHints, bool disableHighEntropyClientHints, bool disableRedirectReferer, IEnumerable<KeyValuePair<string, string>>? exactHeaders, IEnumerable<string>? headerOrder)
+        => RequestBinary(method, url, body, headers, timeout, auth, parameters, cookies, fetchMode, allowRedirects, disableConditionalCache, disableClientHints, disableHighEntropyClientHints, disableRedirectReferer, exactHeaders, headerOrder, initiator: null);
+
+    public Response RequestStream(string method, string url, Stream bodyStream, Dictionary<string, string>? headers, int? timeout, (string, string)? auth, IEnumerable<KeyValuePair<string, string>>? parameters, Dictionary<string, string>? cookies, string? fetchMode, bool? allowRedirects, bool disableConditionalCache, bool disableClientHints, bool disableHighEntropyClientHints, bool disableRedirectReferer, IEnumerable<KeyValuePair<string, string>>? exactHeaders, IEnumerable<string>? headerOrder)
+        => RequestStream(method, url, bodyStream, headers, timeout, auth, parameters, cookies, fetchMode, allowRedirects, disableConditionalCache, disableClientHints, disableHighEntropyClientHints, disableRedirectReferer, exactHeaders, headerOrder, initiator: null);
+
+    public Task<Response> GetAsync(string url, Dictionary<string, string>? headers, IEnumerable<KeyValuePair<string, string>>? parameters, Dictionary<string, string>? cookies, (string, string)? auth, int? timeout, CancellationToken cancellationToken, string? fetchMode, bool? allowRedirects, bool disableConditionalCache, bool disableClientHints, bool disableHighEntropyClientHints, bool disableRedirectReferer, IEnumerable<KeyValuePair<string, string>>? exactHeaders, IEnumerable<string>? headerOrder)
+        => GetAsync(url, headers, parameters, cookies, auth, timeout, cancellationToken, fetchMode, allowRedirects, disableConditionalCache, disableClientHints, disableHighEntropyClientHints, disableRedirectReferer, exactHeaders, headerOrder, initiator: null);
+
+    public Task<Response> PostAsync(string url, string? body, Dictionary<string, string>? headers, IEnumerable<KeyValuePair<string, string>>? parameters, Dictionary<string, string>? cookies, (string, string)? auth, int? timeout, CancellationToken cancellationToken, string? fetchMode, bool? allowRedirects, bool disableConditionalCache, bool disableClientHints, bool disableHighEntropyClientHints, bool disableRedirectReferer, IEnumerable<KeyValuePair<string, string>>? exactHeaders, IEnumerable<string>? headerOrder)
+        => PostAsync(url, body, headers, parameters, cookies, auth, timeout, cancellationToken, fetchMode, allowRedirects, disableConditionalCache, disableClientHints, disableHighEntropyClientHints, disableRedirectReferer, exactHeaders, headerOrder, initiator: null);
+
+    public Task<Response> PostJsonAsync<T>(string url, T data, Dictionary<string, string>? headers, IEnumerable<KeyValuePair<string, string>>? parameters, Dictionary<string, string>? cookies, (string, string)? auth, int? timeout, CancellationToken cancellationToken, string? fetchMode, bool? allowRedirects, bool disableConditionalCache, bool disableClientHints, bool disableHighEntropyClientHints, bool disableRedirectReferer, IEnumerable<KeyValuePair<string, string>>? exactHeaders, IEnumerable<string>? headerOrder)
+        => PostJsonAsync<T>(url, data, headers, parameters, cookies, auth, timeout, cancellationToken, fetchMode, allowRedirects, disableConditionalCache, disableClientHints, disableHighEntropyClientHints, disableRedirectReferer, exactHeaders, headerOrder, initiator: null);
+
+    public Task<Response> RequestAsync(string method, string url, string? body, Dictionary<string, string>? headers, int? timeout, (string, string)? auth, IEnumerable<KeyValuePair<string, string>>? parameters, Dictionary<string, string>? cookies, CancellationToken cancellationToken, string? fetchMode, bool? allowRedirects, bool disableConditionalCache, bool disableClientHints, bool disableHighEntropyClientHints, bool disableRedirectReferer, IEnumerable<KeyValuePair<string, string>>? exactHeaders, IEnumerable<string>? headerOrder)
+        => RequestAsync(method, url, body, headers, timeout, auth, parameters, cookies, cancellationToken, fetchMode, allowRedirects, disableConditionalCache, disableClientHints, disableHighEntropyClientHints, disableRedirectReferer, exactHeaders, headerOrder, initiator: null);
+
+    public Task<Response> PutAsync(string url, string? body, Dictionary<string, string>? headers, IEnumerable<KeyValuePair<string, string>>? parameters, Dictionary<string, string>? cookies, (string, string)? auth, int? timeout, CancellationToken cancellationToken, string? fetchMode, bool? allowRedirects, bool disableConditionalCache, bool disableClientHints, bool disableHighEntropyClientHints, bool disableRedirectReferer, IEnumerable<KeyValuePair<string, string>>? exactHeaders, IEnumerable<string>? headerOrder)
+        => PutAsync(url, body, headers, parameters, cookies, auth, timeout, cancellationToken, fetchMode, allowRedirects, disableConditionalCache, disableClientHints, disableHighEntropyClientHints, disableRedirectReferer, exactHeaders, headerOrder, initiator: null);
+
+    public Task<Response> PutJsonAsync<T>(string url, T data, Dictionary<string, string>? headers, IEnumerable<KeyValuePair<string, string>>? parameters, Dictionary<string, string>? cookies, (string, string)? auth, int? timeout, CancellationToken cancellationToken, string? fetchMode, bool? allowRedirects, bool disableConditionalCache, bool disableClientHints, bool disableHighEntropyClientHints, bool disableRedirectReferer, IEnumerable<KeyValuePair<string, string>>? exactHeaders, IEnumerable<string>? headerOrder)
+        => PutJsonAsync<T>(url, data, headers, parameters, cookies, auth, timeout, cancellationToken, fetchMode, allowRedirects, disableConditionalCache, disableClientHints, disableHighEntropyClientHints, disableRedirectReferer, exactHeaders, headerOrder, initiator: null);
+
+    public Task<Response> DeleteAsync(string url, Dictionary<string, string>? headers, IEnumerable<KeyValuePair<string, string>>? parameters, Dictionary<string, string>? cookies, (string, string)? auth, int? timeout, CancellationToken cancellationToken, string? fetchMode, bool? allowRedirects, bool disableConditionalCache, bool disableClientHints, bool disableHighEntropyClientHints, bool disableRedirectReferer, IEnumerable<KeyValuePair<string, string>>? exactHeaders, IEnumerable<string>? headerOrder)
+        => DeleteAsync(url, headers, parameters, cookies, auth, timeout, cancellationToken, fetchMode, allowRedirects, disableConditionalCache, disableClientHints, disableHighEntropyClientHints, disableRedirectReferer, exactHeaders, headerOrder, initiator: null);
+
+    public Task<Response> PatchAsync(string url, string? body, Dictionary<string, string>? headers, IEnumerable<KeyValuePair<string, string>>? parameters, Dictionary<string, string>? cookies, (string, string)? auth, int? timeout, CancellationToken cancellationToken, string? fetchMode, bool? allowRedirects, bool disableConditionalCache, bool disableClientHints, bool disableHighEntropyClientHints, bool disableRedirectReferer, IEnumerable<KeyValuePair<string, string>>? exactHeaders, IEnumerable<string>? headerOrder)
+        => PatchAsync(url, body, headers, parameters, cookies, auth, timeout, cancellationToken, fetchMode, allowRedirects, disableConditionalCache, disableClientHints, disableHighEntropyClientHints, disableRedirectReferer, exactHeaders, headerOrder, initiator: null);
+
+    public Task<Response> PatchJsonAsync<T>(string url, T data, Dictionary<string, string>? headers, IEnumerable<KeyValuePair<string, string>>? parameters, Dictionary<string, string>? cookies, (string, string)? auth, int? timeout, CancellationToken cancellationToken, string? fetchMode, bool? allowRedirects, bool disableConditionalCache, bool disableClientHints, bool disableHighEntropyClientHints, bool disableRedirectReferer, IEnumerable<KeyValuePair<string, string>>? exactHeaders, IEnumerable<string>? headerOrder)
+        => PatchJsonAsync<T>(url, data, headers, parameters, cookies, auth, timeout, cancellationToken, fetchMode, allowRedirects, disableConditionalCache, disableClientHints, disableHighEntropyClientHints, disableRedirectReferer, exactHeaders, headerOrder, initiator: null);
+
+    public Task<Response> HeadAsync(string url, Dictionary<string, string>? headers, IEnumerable<KeyValuePair<string, string>>? parameters, Dictionary<string, string>? cookies, (string, string)? auth, int? timeout, CancellationToken cancellationToken, string? fetchMode, bool? allowRedirects, bool disableConditionalCache, bool disableClientHints, bool disableHighEntropyClientHints, bool disableRedirectReferer, IEnumerable<KeyValuePair<string, string>>? exactHeaders, IEnumerable<string>? headerOrder)
+        => HeadAsync(url, headers, parameters, cookies, auth, timeout, cancellationToken, fetchMode, allowRedirects, disableConditionalCache, disableClientHints, disableHighEntropyClientHints, disableRedirectReferer, exactHeaders, headerOrder, initiator: null);
+
+    public Task<Response> OptionsAsync(string url, Dictionary<string, string>? headers, IEnumerable<KeyValuePair<string, string>>? parameters, Dictionary<string, string>? cookies, (string, string)? auth, int? timeout, CancellationToken cancellationToken, string? fetchMode, bool? allowRedirects, bool disableConditionalCache, bool disableClientHints, bool disableHighEntropyClientHints, bool disableRedirectReferer, IEnumerable<KeyValuePair<string, string>>? exactHeaders, IEnumerable<string>? headerOrder)
+        => OptionsAsync(url, headers, parameters, cookies, auth, timeout, cancellationToken, fetchMode, allowRedirects, disableConditionalCache, disableClientHints, disableHighEntropyClientHints, disableRedirectReferer, exactHeaders, headerOrder, initiator: null);
+
+    public Task<Response> RequestBinaryAsync(string method, string url, byte[] body, Dictionary<string, string>? headers, int? timeout, (string, string)? auth, IEnumerable<KeyValuePair<string, string>>? parameters, Dictionary<string, string>? cookies, CancellationToken cancellationToken, string? fetchMode, bool? allowRedirects, bool disableConditionalCache, bool disableClientHints, bool disableHighEntropyClientHints, bool disableRedirectReferer, IEnumerable<KeyValuePair<string, string>>? exactHeaders, IEnumerable<string>? headerOrder)
+        => RequestBinaryAsync(method, url, body, headers, timeout, auth, parameters, cookies, cancellationToken, fetchMode, allowRedirects, disableConditionalCache, disableClientHints, disableHighEntropyClientHints, disableRedirectReferer, exactHeaders, headerOrder, initiator: null);
+
+    public Task<Response> RequestStreamAsync(string method, string url, Stream bodyStream, Dictionary<string, string>? headers, int? timeout, (string, string)? auth, IEnumerable<KeyValuePair<string, string>>? parameters, Dictionary<string, string>? cookies, CancellationToken cancellationToken, string? fetchMode, bool? allowRedirects, bool disableConditionalCache, bool disableClientHints, bool disableHighEntropyClientHints, bool disableRedirectReferer, IEnumerable<KeyValuePair<string, string>>? exactHeaders, IEnumerable<string>? headerOrder)
+        => RequestStreamAsync(method, url, bodyStream, headers, timeout, auth, parameters, cookies, cancellationToken, fetchMode, allowRedirects, disableConditionalCache, disableClientHints, disableHighEntropyClientHints, disableRedirectReferer, exactHeaders, headerOrder, initiator: null);
+
+    public Task<Response> PostAsync(string url, byte[] body, Dictionary<string, string>? headers, IEnumerable<KeyValuePair<string, string>>? parameters, Dictionary<string, string>? cookies, (string, string)? auth, int? timeout, CancellationToken cancellationToken, string? fetchMode, bool? allowRedirects, bool disableConditionalCache, bool disableClientHints, bool disableHighEntropyClientHints, bool disableRedirectReferer, IEnumerable<KeyValuePair<string, string>>? exactHeaders, IEnumerable<string>? headerOrder)
+        => PostAsync(url, body, headers, parameters, cookies, auth, timeout, cancellationToken, fetchMode, allowRedirects, disableConditionalCache, disableClientHints, disableHighEntropyClientHints, disableRedirectReferer, exactHeaders, headerOrder, initiator: null);
+
+    public Task<Response> PostAsync(string url, Stream bodyStream, Dictionary<string, string>? headers, IEnumerable<KeyValuePair<string, string>>? parameters, Dictionary<string, string>? cookies, (string, string)? auth, int? timeout, CancellationToken cancellationToken, string? fetchMode, bool? allowRedirects, bool disableConditionalCache, bool disableClientHints, bool disableHighEntropyClientHints, bool disableRedirectReferer, IEnumerable<KeyValuePair<string, string>>? exactHeaders, IEnumerable<string>? headerOrder)
+        => PostAsync(url, bodyStream, headers, parameters, cookies, auth, timeout, cancellationToken, fetchMode, allowRedirects, disableConditionalCache, disableClientHints, disableHighEntropyClientHints, disableRedirectReferer, exactHeaders, headerOrder, initiator: null);
+
+    public Task<Response> PutAsync(string url, byte[] body, Dictionary<string, string>? headers, IEnumerable<KeyValuePair<string, string>>? parameters, Dictionary<string, string>? cookies, (string, string)? auth, int? timeout, CancellationToken cancellationToken, string? fetchMode, bool? allowRedirects, bool disableConditionalCache, bool disableClientHints, bool disableHighEntropyClientHints, bool disableRedirectReferer, IEnumerable<KeyValuePair<string, string>>? exactHeaders, IEnumerable<string>? headerOrder)
+        => PutAsync(url, body, headers, parameters, cookies, auth, timeout, cancellationToken, fetchMode, allowRedirects, disableConditionalCache, disableClientHints, disableHighEntropyClientHints, disableRedirectReferer, exactHeaders, headerOrder, initiator: null);
+
+    public Task<Response> PutAsync(string url, Stream bodyStream, Dictionary<string, string>? headers, IEnumerable<KeyValuePair<string, string>>? parameters, Dictionary<string, string>? cookies, (string, string)? auth, int? timeout, CancellationToken cancellationToken, string? fetchMode, bool? allowRedirects, bool disableConditionalCache, bool disableClientHints, bool disableHighEntropyClientHints, bool disableRedirectReferer, IEnumerable<KeyValuePair<string, string>>? exactHeaders, IEnumerable<string>? headerOrder)
+        => PutAsync(url, bodyStream, headers, parameters, cookies, auth, timeout, cancellationToken, fetchMode, allowRedirects, disableConditionalCache, disableClientHints, disableHighEntropyClientHints, disableRedirectReferer, exactHeaders, headerOrder, initiator: null);
+
+    public Task<Response> PatchAsync(string url, byte[] body, Dictionary<string, string>? headers, IEnumerable<KeyValuePair<string, string>>? parameters, Dictionary<string, string>? cookies, (string, string)? auth, int? timeout, CancellationToken cancellationToken, string? fetchMode, bool? allowRedirects, bool disableConditionalCache, bool disableClientHints, bool disableHighEntropyClientHints, bool disableRedirectReferer, IEnumerable<KeyValuePair<string, string>>? exactHeaders, IEnumerable<string>? headerOrder)
+        => PatchAsync(url, body, headers, parameters, cookies, auth, timeout, cancellationToken, fetchMode, allowRedirects, disableConditionalCache, disableClientHints, disableHighEntropyClientHints, disableRedirectReferer, exactHeaders, headerOrder, initiator: null);
+
+    public Task<Response> PatchAsync(string url, Stream bodyStream, Dictionary<string, string>? headers, IEnumerable<KeyValuePair<string, string>>? parameters, Dictionary<string, string>? cookies, (string, string)? auth, int? timeout, CancellationToken cancellationToken, string? fetchMode, bool? allowRedirects, bool disableConditionalCache, bool disableClientHints, bool disableHighEntropyClientHints, bool disableRedirectReferer, IEnumerable<KeyValuePair<string, string>>? exactHeaders, IEnumerable<string>? headerOrder)
+        => PatchAsync(url, bodyStream, headers, parameters, cookies, auth, timeout, cancellationToken, fetchMode, allowRedirects, disableConditionalCache, disableClientHints, disableHighEntropyClientHints, disableRedirectReferer, exactHeaders, headerOrder, initiator: null);
+
+    public Task<Response> PostMultipartAsync(string url, Dictionary<string, string>? fields, Dictionary<string, MultipartFile>? files, Dictionary<string, string>? headers, IEnumerable<KeyValuePair<string, string>>? parameters, Dictionary<string, string>? cookies, (string Username, string Password)? auth, int? timeout, CancellationToken cancellationToken, string? fetchMode, bool? allowRedirects, bool disableConditionalCache, bool disableClientHints, bool disableHighEntropyClientHints, bool disableRedirectReferer, IEnumerable<KeyValuePair<string, string>>? exactHeaders, IEnumerable<string>? headerOrder)
+        => PostMultipartAsync(url, fields, files, headers, parameters, cookies, auth, timeout, cancellationToken, fetchMode, allowRedirects, disableConditionalCache, disableClientHints, disableHighEntropyClientHints, disableRedirectReferer, exactHeaders, headerOrder, initiator: null);
+
 }
 
 /// <summary>
@@ -3970,6 +4102,14 @@ internal class RequestConfig
     public bool DisableRedirectReferer { get; set; }
 
     /// <summary>
+    /// The page API the request stands for: "fetch" for fetch(), "xhr" for an
+    /// XMLHttpRequest. Null decides from the request's shape.
+    /// </summary>
+    [JsonPropertyName("initiator")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Initiator { get; set; }
+
+    /// <summary>
     /// Replaces the whole header pipeline. A list of [name, value] pairs rather
     /// than a dictionary, because a dictionary cannot carry a repeated name and
     /// cannot hold position.
@@ -4201,6 +4341,14 @@ internal class RequestOptions
     [JsonPropertyName("disable_redirect_referer")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public bool DisableRedirectReferer { get; set; }
+
+    /// <summary>
+    /// The page API the request stands for: "fetch" for fetch(), "xhr" for an
+    /// XMLHttpRequest. Null decides from the request's shape.
+    /// </summary>
+    [JsonPropertyName("initiator")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Initiator { get; set; }
 }
 
 internal class StreamOptions
@@ -4241,6 +4389,14 @@ internal class StreamOptions
     [JsonPropertyName("disable_redirect_referer")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public bool DisableRedirectReferer { get; set; }
+
+    /// <summary>
+    /// The page API the request stands for: "fetch" for fetch(), "xhr" for an
+    /// XMLHttpRequest. Null decides from the request's shape.
+    /// </summary>
+    [JsonPropertyName("initiator")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Initiator { get; set; }
 }
 
 internal class StreamMetadata

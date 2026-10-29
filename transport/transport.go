@@ -340,6 +340,48 @@ type Request struct {
 	// the hop takes the preset's HPACKHeaderOrderEarlyReferer, with Referer
 	// right after Accept-Encoding rather than after Connection.
 	RedirectHop bool
+
+	// Initiator names the page API a request stands for: InitiatorFetch for a
+	// fetch(), InitiatorXHR for an XMLHttpRequest. Either one makes the request
+	// a CORS call, sec-fetch-mode cors and sec-fetch-dest empty, unless the
+	// caller sets those headers. Empty leaves that to the request's shape, as
+	// before, and a CORS call is then sent as a fetch().
+	//
+	// Browsers send the two differently and the headers cannot tell them apart,
+	// so only the caller can. Firefox sends an XMLHttpRequest with no priority
+	// header (preset field XHRPriorityHeader), and on a first hop with its
+	// Referer after Connection, where a fetch() has it right after
+	// Accept-Encoding. A preset that says nothing about XMLHttpRequest sends
+	// one like a fetch(). The session carries it onto every redirect hop.
+	Initiator string
+}
+
+// Values for Request.Initiator.
+const (
+	InitiatorFetch = "fetch"
+	InitiatorXHR   = "xhr"
+)
+
+// checkInitiator rejects an Initiator the transport does not know, so that a
+// misspelt one fails instead of quietly sending a fetch().
+func checkInitiator(initiator string) error {
+	switch initiator {
+	case "", InitiatorFetch, InitiatorXHR:
+		return nil
+	}
+	return NewRequestError("initiator", "", "", "",
+		fmt.Errorf("unknown initiator %q: use %q or %q", initiator, InitiatorFetch, InitiatorXHR))
+}
+
+// requestShape is what the header pipeline needs to know about a request
+// beyond its headers.
+type requestShape struct {
+	redirectHop bool
+	initiator   string
+}
+
+func shapeOf(req *Request) requestShape {
+	return requestShape{redirectHop: req.RedirectHop, initiator: req.Initiator}
 }
 
 // ErrUseLastResponse, returned from a Request.OnRedirect callback, stops the
@@ -1438,6 +1480,9 @@ func (t *Transport) Do(ctx context.Context, req *Request) (*Response, error) {
 	if err != nil {
 		return nil, NewRequestError("parse_url", "", "", "", err)
 	}
+	if err := checkInitiator(req.Initiator); err != nil {
+		return nil, err
+	}
 
 	// Snapshot the mutable fields once so a concurrent SetProxy/SetPreset/
 	// SetProtocol can't race the dispatch below (see transportSnapshot).
@@ -2043,7 +2088,7 @@ func (t *Transport) doHTTP1(ctx context.Context, req *Request) (*Response, error
 
 	// Set preset headers (with ordering for fingerprinting)
 	// Pass "h1" protocol so Chrome presets don't send Priority header on HTTP/1.1
-	applyPresetHeaders(httpReq, t.wireHeaders(snap.preset), t.effectiveHeaderOrder(req), t.getCustomPseudoOrder(), effectiveTLSOnly, "h1", req.Headers, req.DisableClientHints, req.ExactHeaders, req.RedirectHop)
+	applyPresetHeaders(httpReq, t.wireHeaders(snap.preset), t.effectiveHeaderOrder(req), t.getCustomPseudoOrder(), effectiveTLSOnly, "h1", req.Headers, req.DisableClientHints, req.ExactHeaders, shapeOf(req))
 
 	mergeCallerHeaders(httpReq, req, "h1")
 	stripH1Priority(httpReq, req, snap.preset, effectiveTLSOnly)
@@ -2149,7 +2194,7 @@ func (t *Transport) doHTTP1WithTLSConn(ctx context.Context, req *Request, alpnEr
 	}
 
 	// Set preset headers - pass "h1" protocol so Chrome presets don't send Priority header
-	applyPresetHeaders(httpReq, t.wireHeaders(snap.preset), t.effectiveHeaderOrder(req), t.getCustomPseudoOrder(), effectiveTLSOnly, "h1", req.Headers, req.DisableClientHints, req.ExactHeaders, req.RedirectHop)
+	applyPresetHeaders(httpReq, t.wireHeaders(snap.preset), t.effectiveHeaderOrder(req), t.getCustomPseudoOrder(), effectiveTLSOnly, "h1", req.Headers, req.DisableClientHints, req.ExactHeaders, shapeOf(req))
 
 	mergeCallerHeaders(httpReq, req, "h1")
 	stripH1Priority(httpReq, req, snap.preset, effectiveTLSOnly)
@@ -2262,7 +2307,7 @@ func (t *Transport) doHTTP2(ctx context.Context, req *Request) (*Response, error
 	}
 
 	// Set preset headers (with ordering for fingerprinting)
-	applyPresetHeaders(httpReq, t.wireHeaders(snap.preset), t.effectiveHeaderOrder(req), t.getCustomPseudoOrder(), effectiveTLSOnly, "h2", req.Headers, req.DisableClientHints, req.ExactHeaders, req.RedirectHop)
+	applyPresetHeaders(httpReq, t.wireHeaders(snap.preset), t.effectiveHeaderOrder(req), t.getCustomPseudoOrder(), effectiveTLSOnly, "h2", req.Headers, req.DisableClientHints, req.ExactHeaders, shapeOf(req))
 
 	mergeCallerHeaders(httpReq, req, "h2")
 
@@ -2400,7 +2445,7 @@ func (t *Transport) doHTTP3(ctx context.Context, req *Request) (*Response, error
 	}
 
 	// Set preset headers (with ordering for fingerprinting)
-	applyPresetHeaders(httpReq, t.wireHeaders(snap.preset), t.effectiveHeaderOrder(req), t.getCustomPseudoOrder(), effectiveTLSOnly, "h3", req.Headers, req.DisableClientHints, req.ExactHeaders, req.RedirectHop)
+	applyPresetHeaders(httpReq, t.wireHeaders(snap.preset), t.effectiveHeaderOrder(req), t.getCustomPseudoOrder(), effectiveTLSOnly, "h3", req.Headers, req.DisableClientHints, req.ExactHeaders, shapeOf(req))
 
 	mergeCallerHeaders(httpReq, req, "h3")
 
@@ -3082,7 +3127,7 @@ func (t *Transport) wireHeaders(preset *fingerprint.Preset) *presetWireHeaders {
 	return w
 }
 
-func applyPresetHeaders(httpReq *http.Request, wire *presetWireHeaders, customHeaderOrder []string, customPseudoOrder []string, tlsOnly bool, protocol string, userHeaders map[string][]string, stripClientHints bool, exactHeaders []fingerprint.HeaderPair, redirectHop bool) {
+func applyPresetHeaders(httpReq *http.Request, wire *presetWireHeaders, customHeaderOrder []string, customPseudoOrder []string, tlsOnly bool, protocol string, userHeaders map[string][]string, stripClientHints bool, exactHeaders []fingerprint.HeaderPair, shape requestShape) {
 	preset := wire.preset
 	if applyExactHeaders(httpReq, exactHeaders, preset, customPseudoOrder, protocol) {
 		return
@@ -3117,8 +3162,9 @@ func applyPresetHeaders(httpReq *http.Request, wire *presetWireHeaders, customHe
 		//
 		// Skipped for presets that describe a client sending no Sec-Fetch-* at
 		// all; see presetSendsSecFetch for why inferring that from the preset
-		// leaves every browser preset untouched.
-		if wire.sendsSecFetch && sniffXHRMode(httpReq.Method, userHeaders) {
+		// leaves every browser preset untouched. A request whose caller named
+		// the page API is a CORS call without any sniffing.
+		if wire.sendsSecFetch && (statedCORS(shape.initiator, userHeaders) || sniffXHRMode(httpReq.Method, userHeaders)) {
 			// Preserve any explicitly user-supplied Sec-Fetch-Mode/Dest/Site;
 			// the sniff coercion is for "user said nothing, infer XHR" — once
 			// they pin a value (e.g. mode=no-cors, dest=image, site=same-origin)
@@ -3197,6 +3243,19 @@ func applyPresetHeaders(httpReq *http.Request, wire *presetWireHeaders, customHe
 			}
 		}
 
+		// An XMLHttpRequest sends the preset's own priority header in place of
+		// the table's, when the preset has one; Firefox's is none. A priority the
+		// caller sets is merged after this and still goes out.
+		if shape.initiator == InitiatorXHR {
+			if hv, ok := preset.XHRPriorityHeader(); ok {
+				if hv == "" {
+					delete(httpReq.Header, "Priority")
+				} else {
+					httpReq.Header["Priority"] = []string{hv}
+				}
+			}
+		}
+
 		// Chromium does NOT send the priority header on HTTP/1.1, only on
 		// HTTP/2 and HTTP/3, and sending it there is a tell. See
 		// SendsPriorityOverHTTP1 for which presets that covers. The caller's
@@ -3237,12 +3296,13 @@ func applyPresetHeaders(httpReq *http.Request, wire *presetWireHeaders, customHe
 	// and a subresource through different paths and the leading block comes out
 	// differently, so a preset carrying one order gets one of the two wrong.
 	// Firefox settles Referer earlier on a fetch() and on a redirect hop than on
-	// anything else, so those take an order of their own. The dest read here is
-	// the final one: the Sec-Fetch inference above has already run, and the
-	// priority table a few lines up reads the same field.
+	// anything else, an XMLHttpRequest's first hop included, so those take an
+	// order of their own. The dest read here is the final one: the Sec-Fetch
+	// inference above has already run, and the priority table a few lines up
+	// reads the same field.
 	httpReq.Header[http.HeaderOrderKey] = CompleteHeaderOrder(
 		customHeaderOrder,
-		preset.HeaderOrderFor(httpReq.Header.Get("Sec-Fetch-Dest"), redirectHop),
+		preset.HeaderOrderFor(httpReq.Header.Get("Sec-Fetch-Dest"), shape.redirectHop, shape.initiator == InitiatorXHR),
 		httpReq.Header, userHeaders)
 
 	// Set pseudo-header order: custom (Akamai) > preset H2Config > heuristic
@@ -3345,6 +3405,13 @@ func sniffXHRMode(method string, userHeaders map[string][]string) bool {
 func frameNavigation(userHeaders map[string][]string) bool {
 	dest := headerVal(userHeaders, "Sec-Fetch-Dest")
 	return dest != "" && !strings.EqualFold(dest, "document") && headerVal(userHeaders, "Sec-Fetch-User") == ""
+}
+
+// statedCORS reports whether the caller named the page API a request stands
+// for, which makes it a CORS call, unless they set its Sec-Fetch-Mode or
+// Sec-Fetch-Dest themselves; then sniffXHRMode reads those as always.
+func statedCORS(initiator string, userHeaders map[string][]string) bool {
+	return initiator != "" && headerVal(userHeaders, "Sec-Fetch-Mode") == "" && headerVal(userHeaders, "Sec-Fetch-Dest") == ""
 }
 
 func headerVal(h map[string][]string, name string) string {

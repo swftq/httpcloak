@@ -370,6 +370,16 @@ export interface RequestOptions {
   disableRedirectReferer?: boolean;
 
   /**
+   * The page API this request stands for: "fetch" for fetch(), "xhr" for an
+   * XMLHttpRequest. Either makes it a CORS call (sec-fetch-mode cors,
+   * sec-fetch-dest empty) unless you set those headers. Browsers send the two
+   * differently: a Firefox preset sends an XMLHttpRequest with no priority
+   * header and, on its first hop, Referer after Connection. Omitted decides
+   * from the request's shape and sends any CORS call as a fetch().
+   */
+  initiator?: "fetch" | "xhr";
+
+  /**
    * Replace the whole header pipeline for this request.
    *
    * The pairs go on the wire in the order and casing given, and nothing else

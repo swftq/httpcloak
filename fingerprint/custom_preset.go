@@ -197,6 +197,11 @@ type HTTP2Spec struct {
 	// PriorityOverHTTP1 sends the table's priority header on HTTP/1.1 too;
 	// see Preset.SendsPriorityOverHTTP1. Omitted derives it.
 	PriorityOverHTTP1 *bool `json:"priority_over_http1,omitempty"`
+
+	// XHRPriorityHeader is the priority header an XMLHttpRequest sends in place
+	// of a fetch()'s; "" sends none. Omitted sends a fetch()'s. See
+	// H2FingerprintConfig.XHRPriorityHeader.
+	XHRPriorityHeader *string `json:"xhr_priority_header,omitempty"`
 }
 
 // ResourcePrioritySpec is the JSON shape of fingerprint.ResourcePriority.
@@ -554,6 +559,10 @@ func clonePreset(src *Preset) *Preset {
 		if src.H2Config.DisableCookieSplit != nil {
 			v := *src.H2Config.DisableCookieSplit
 			h2.DisableCookieSplit = &v
+		}
+		if src.H2Config.XHRPriorityHeader != nil {
+			v := *src.H2Config.XHRPriorityHeader
+			h2.XHRPriorityHeader = &v
 		}
 		if src.H2Config.PriorityTable != nil {
 			h2.PriorityTable = make(map[string]ResourcePriority, len(src.H2Config.PriorityTable))
@@ -1095,7 +1104,8 @@ func applyHTTP2(p *Preset, spec *HTTP2Spec) error {
 		spec.DisableCookieSplit != nil || spec.PriorityTable != nil ||
 		spec.DataFrameMaxSize != nil || spec.PrefacePingIdleMs != nil ||
 		spec.PrefacePingHangMs != nil || spec.IdlePingMs != nil ||
-		spec.PriorityModel != nil || spec.PriorityOverHTTP1 != nil {
+		spec.PriorityModel != nil || spec.PriorityOverHTTP1 != nil ||
+		spec.XHRPriorityHeader != nil {
 		if p.H2Config == nil {
 			p.H2Config = &H2FingerprintConfig{}
 		}
@@ -1174,6 +1184,10 @@ func applyHTTP2(p *Preset, spec *HTTP2Spec) error {
 		if spec.PriorityOverHTTP1 != nil {
 			v := *spec.PriorityOverHTTP1
 			p.H2Config.PriorityOverHTTP1 = &v
+		}
+		if spec.XHRPriorityHeader != nil {
+			v := *spec.XHRPriorityHeader
+			p.H2Config.XHRPriorityHeader = &v
 		}
 	}
 

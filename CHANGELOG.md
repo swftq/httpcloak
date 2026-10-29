@@ -12,6 +12,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`hpack_header_order_early_referer`**: a second header order for the requests whose `Referer` a browser settles before it picks a connection, which are a `fetch()` (`sec-fetch-dest: empty`) and every redirect hop. Firefox needs it, since it writes `Referer` right after `Accept-Encoding` on those and after `Connection` on everything else. In Go it is `H2FingerprintConfig.HPACKHeaderOrderEarlyReferer`, and `Preset.HeaderOrderFor` picks between the orders.
 - **`"*"` in a header order** (`fingerprint.OtherHeaders`): the headers the order does not name, usually the caller's, go where it stands instead of after everything else. The marker never reaches the wire.
 - **`Request.RedirectHop`**: marks a request built to follow a 3xx. The session sets it on every hop it follows.
+- **`initiator` request option** (`Request.Initiator` in Go; `initiator` in Python, Node.js, .NET and Android): names the page API a request stands for, `"fetch"` or `"xhr"`. Either makes it a CORS call unless the caller sets `Sec-Fetch-Mode` or `Sec-Fetch-Dest`, and the session carries it onto every redirect hop. Any other value fails the request.
+  - Browsers send the two differently and nothing in the headers tells them apart. Firefox 159 sent every `XMLHttpRequest` with no `Priority` header at the same HTTP/2 weight as a `fetch()`, and on its first hop with `Referer` after `Connection`. With `"xhr"`, the Firefox presets now do the same.
+  - A preset says what an `XMLHttpRequest` sends with `xhr_priority_header` (`H2FingerprintConfig.XHRPriorityHeader`); one that does not sends it like a `fetch()`.
+  - In .NET the parameter comes last on every method that takes `disableRedirectReferer`, with a forwarder for each previous shape so compiled callers keep working.
 
 ### Fixed
 
@@ -74,7 +78,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Firefox presets send Firefox 159's header order, on HTTP/1.1 and HTTP/2**: captured from Firefox 159 for the page, its stylesheets, scripts, images and frames, `fetch()` and `XMLHttpRequest` calls, form and `fetch()` POSTs, revalidations and redirect hops. Firefox uses one order on every protocol. HTTP/2 is the HTTP/1.1 head without `Host` and `Connection`, with `te: trailers` last. The presets had `Referer` and `Cookie` after `priority` and `te`, put `Content-Type`, `Content-Length` and `Origin` last, and sent the caller's headers in a sorted tail at the very end, so `te` was not last either.
   - The order is now `User-Agent`, `Accept`, `Accept-Language`, `Accept-Encoding`, the caller's headers led by `Content-Type`, `Content-Length`, `Origin`, `Connection`, `Referer`, `Cookie`, `Upgrade-Insecure-Requests`, the `Sec-Fetch-*` block, `If-Modified-Since`, `If-None-Match`, `Priority`, then `te` on HTTP/2.
   - A `fetch()`-shaped request and a redirect hop carry `Referer` right after `Accept-Encoding` instead, as Firefox does.
-  - Not yet modelled: a page that sends a `Referrer-Policy` makes Firefox put `Referer` early on every request, and an `XMLHttpRequest` sends no `Priority`.
+  - An `XMLHttpRequest` is told apart only by the new `initiator` option.
+  - Not yet modelled: a page that sends a `Referrer-Policy` makes Firefox put `Referer` early on every request.
   - `client.Client` uses the same order for every request shape and still sends a preset's `TE` on HTTP/1.1.
 - **A preset's `TE` goes out on HTTP/2 only**: the Firefox presets sent `Te: trailers` on HTTP/1.1, where Firefox sends no `TE` at all; it adds `te: trailers` only in its HTTP/2 encoder. A `TE` the caller sets still goes out.
 
