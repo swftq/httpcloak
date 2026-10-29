@@ -38,9 +38,19 @@ import (
 //
 // Nothing is worked out for a header the caller set, in any spelling, or for a
 // request that goes out with no Sec-Fetch-* at all: one under ExactHeaders, a
-// TLS-only one, or one on a preset that sends none. With no page to read, the
-// pipeline's values stand: none for a navigation, cross-site for a request
-// sniffed as fetch().
+// TLS-only one, or one on a preset that sends none.
+//
+// A cors request that names no page takes its own URL's origin for the page,
+// so it goes out same-origin, with Origin only on a method other than GET or
+// HEAD. That is a fetch() from a page that sends no Referer: Chrome 156 and
+// Firefox 159, on a page served with Referrer-Policy: no-referrer, sent the
+// default policy's values without the Referer, and to their own origin that
+// was the pair above. The cross-site with no Origin the pipeline writes there
+// is a pair no browser sends, and Go's CrossOriginProtection refuses it on any
+// method but GET, HEAD and OPTIONS. An Origin of "null" or a Sec-Fetch-Site
+// other than same-origin from the caller keeps the pipeline's values (see
+// takesItsOwnOrigin). So does any other mode with no page: none for a
+// navigation, cross-site for no-cors.
 //
 // The session writes the results into the first request's headers, so a
 // redirect hop carries them on as it carries the caller's own.
@@ -64,17 +74,37 @@ func (t *Transport) PageFetchHeaders(req *Request) (site, origin string) {
 	if !ok {
 		return "", ""
 	}
+	mode := pageFetchMode(wire, req)
 	page, ok := pageOf(req.Headers)
 	if !ok {
-		return "", ""
+		if !takesItsOwnOrigin(req.Headers, mode) {
+			return "", ""
+		}
+		page = target
 	}
 	if _, set := setByCaller(req.Headers, "Sec-Fetch-Site"); !set {
 		site = page.relationTo(target)
 	}
 	if _, set := setByCaller(req.Headers, "Origin"); !set {
-		origin = requestOrigin(page, target, pageFetchMode(wire, req), req.Method)
+		origin = requestOrigin(page, target, mode, req.Method)
 	}
 	return site, origin
+}
+
+// takesItsOwnOrigin reports whether a request that names no page, sent with
+// headers h in mode, takes its own URL's origin for one. That is a cors
+// request with no Origin from the caller and no Sec-Fetch-Site other than
+// same-origin. An Origin of "null" names an opaque page, and any other site
+// puts the page somewhere the request does not say.
+func takesItsOwnOrigin(h map[string][]string, mode string) bool {
+	if mode != "cors" {
+		return false
+	}
+	if _, set := setByCaller(h, "Origin"); set {
+		return false
+	}
+	site, set := setByCaller(h, "Sec-Fetch-Site")
+	return !set || strings.EqualFold(strings.TrimSpace(site), "same-origin")
 }
 
 // pageOrigin is an origin as Fetch compares them: scheme, host and port, with

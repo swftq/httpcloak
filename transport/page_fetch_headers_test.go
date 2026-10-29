@@ -26,13 +26,39 @@ func TestPageFetchHeaders(t *testing.T) {
 		req          Request
 		site, origin string
 	}{
-		// No page named: the pipeline's own values stand.
+		// No page named: outside cors mode the pipeline's own values stand.
 		{"navigation without a Referer", Request{URL: "https://a.test/x"}, "", ""},
-		{"fetch without a Referer", Request{URL: "https://a.test/x", Headers: map[string][]string{"Accept": {"application/json"}}}, "", ""},
+		{"form POST without a Referer", Request{URL: "https://a.test/x", Method: "POST", Headers: map[string][]string{
+			"Content-Type": {"application/x-www-form-urlencoded"}}}, "", ""},
+		{"no-cors POST without a Referer", Request{URL: "https://a.test/x", Method: "POST", Headers: map[string][]string{
+			"Sec-Fetch-Mode": {"no-cors"}, "Content-Type": {"text/plain"}}}, "", ""},
+		{"websocket without a Referer", Request{URL: "https://a.test/x", Headers: map[string][]string{"Sec-Fetch-Mode": {"websocket"}}}, "", ""},
 		{"empty Referer", Request{URL: "https://a.test/x", Headers: map[string][]string{"Referer": {""}}}, "", ""},
 		{"Referer that is not an http URL", Request{URL: "https://a.test/x", Headers: map[string][]string{"Referer": {"android-app://com.example/"}}}, "", ""},
 		{"relative Referer", Request{URL: "https://a.test/x", Headers: map[string][]string{"Referer": {"/page"}}}, "", ""},
 		{"a Referer key with no values", Request{URL: "https://a.test/x", Headers: map[string][]string{"Referer": {}}}, "", ""},
+
+		// A cors request naming no page takes its own URL's origin for one.
+		{"fetch without a Referer", Request{URL: "https://a.test/x", Headers: map[string][]string{"Accept": {"application/json"}}}, "same-origin", ""},
+		{"fetch HEAD without a Referer", Request{URL: "https://a.test/x", Method: "HEAD", Headers: map[string][]string{"Accept": {"application/json"}}}, "same-origin", ""},
+		{"fetch POST without a Referer", Request{URL: "https://a.test/x", Method: "POST", Headers: map[string][]string{"Content-Type": {"application/json"}}}, "same-origin", "https://a.test"},
+		{"DELETE without a Referer", Request{URL: "https://a.test/x", Method: "delete"}, "same-origin", "https://a.test"},
+		{"fetch OPTIONS without a Referer", Request{URL: "https://a.test/x", Method: "OPTIONS", Headers: map[string][]string{"Accept": {"*/*"}}}, "same-origin", "https://a.test"},
+		{"cors pinned without a Referer", Request{URL: "https://a.test/x", Method: "POST", Headers: map[string][]string{
+			"sec-fetch-mode": {"CORS"}, "Content-Type": {"application/x-www-form-urlencoded"}}}, "same-origin", "https://a.test"},
+		{"no Referer, URL on another port", Request{URL: "https://A.test:8443/x", Method: "POST", Headers: map[string][]string{"Content-Type": {"application/json"}}}, "same-origin", "https://a.test:8443"},
+		{"no Referer, default port written", Request{URL: "https://a.test:443/x", Method: "POST", Headers: map[string][]string{"Content-Type": {"application/json"}}}, "same-origin", "https://a.test"},
+		{"no Referer, plain http", Request{URL: "http://a.test:8080/x", Method: "PUT", Headers: map[string][]string{"Content-Type": {"application/json"}}}, "same-origin", "http://a.test:8080"},
+		{"no Referer, IPv6", Request{URL: "https://[::1]:8443/x", Method: "POST", Headers: map[string][]string{"Content-Type": {"application/json"}}}, "same-origin", "https://[::1]:8443"},
+		{"empty Referer on a fetch", Request{URL: "https://a.test/x", Headers: map[string][]string{"Referer": {""}, "Accept": {"application/json"}}}, "same-origin", ""},
+		{"unusable Referer on a fetch POST", Request{URL: "https://a.test/x", Method: "POST", Headers: map[string][]string{
+			"Referer": {"about:client"}, "Content-Type": {"application/json"}}}, "same-origin", "https://a.test"},
+		{"caller's same-origin without a Referer", Request{URL: "https://a.test/x", Method: "POST", Headers: map[string][]string{
+			"sec-fetch-site": {"Same-Origin"}, "Content-Type": {"application/json"}}}, "", "https://a.test"},
+		{"caller's other site without a Referer", Request{URL: "https://a.test/x", Method: "POST", Headers: map[string][]string{
+			"Sec-Fetch-Site": {"cross-site"}, "Content-Type": {"application/json"}}}, "", ""},
+		{"caller's empty site without a Referer", Request{URL: "https://a.test/x", Method: "POST", Headers: map[string][]string{
+			"Sec-Fetch-Site": {""}, "Content-Type": {"application/json"}}}, "", ""},
 
 		// The relation, the same in every mode.
 		{"navigation, same origin", Request{URL: "https://a.test/x", Headers: map[string][]string{"Referer": {"https://a.test/p?q=1#f"}}}, "same-origin", ""},

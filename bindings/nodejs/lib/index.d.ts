@@ -321,7 +321,7 @@ export interface RequestOptions {
    * Explicit Sec-Fetch-Mode/Dest override for requests where auto-sniffing isn't enough.
    *
    * Valid values:
-   * - `"cors"` - XHR/fetch() request (Sec-Fetch-Mode: cors, Sec-Fetch-Dest: empty; Sec-Fetch-Site follows the Referer you set, cross-site without one)
+   * - `"cors"` - XHR/fetch() request (Sec-Fetch-Mode: cors, Sec-Fetch-Dest: empty; Sec-Fetch-Site follows the Referer you set, same-origin without one)
    * - `"no-cors"` - Subresource load (image/script/stylesheet tag)
    * - `"navigate"` - Top-level navigation (document load, classic form POST)
    * - `"websocket"` - WebSocket upgrade
