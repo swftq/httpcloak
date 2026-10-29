@@ -127,7 +127,6 @@ DATA stream=7 flags=0x1 len=7
 --- request on connection 1
 GET /a HTTP/1.1
 Host: 127.0.0.1:PORT
-Connection: keep-alive
 Sec-Fetch-Dest: document
 User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.3 Safari/605.1.15
 Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8
@@ -136,10 +135,10 @@ Sec-Fetch-Mode: navigate
 Accept-Language: en-US,en;q=0.9
 Priority: u=0, i
 Accept-Encoding: gzip, deflate, br, zstd
+Connection: keep-alive
 --- request on connection 1
 GET /b?q=1 HTTP/1.1
 Host: 127.0.0.1:PORT
-Connection: keep-alive
 Sec-Fetch-Dest: document
 User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.3 Safari/605.1.15
 Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8
@@ -148,10 +147,10 @@ Sec-Fetch-Mode: navigate
 Accept-Language: en-US,en;q=0.9
 Priority: u=0, i
 Accept-Encoding: gzip, deflate, br, zstd
+Connection: keep-alive
 --- request on connection 1
 GET /b?q=2 HTTP/1.1
 Host: 127.0.0.1:PORT
-Connection: keep-alive
 Sec-Fetch-Dest: document
 User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.3 Safari/605.1.15
 Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8
@@ -160,10 +159,10 @@ Sec-Fetch-Mode: navigate
 Accept-Language: en-US,en;q=0.9
 Priority: u=0, i
 Accept-Encoding: gzip, deflate, br, zstd
+Connection: keep-alive
 --- request on connection 1
 POST /c HTTP/1.1
 Host: 127.0.0.1:PORT
-Connection: keep-alive
 Sec-Fetch-Dest: empty
 User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.3 Safari/605.1.15
 Accept: */*
@@ -172,6 +171,7 @@ Sec-Fetch-Mode: cors
 Accept-Language: en-US,en;q=0.9
 Priority: u=3, i
 Accept-Encoding: gzip, deflate, br, zstd
+Connection: keep-alive
 Content-Type: application/json
 Content-Length: 7
 body "{\"k\":1}"
@@ -308,6 +308,7 @@ DATA len=7
         "accept-language",
         "priority",
         "accept-encoding",
+        "connection",
         "cookie",
         "content-type",
         "content-length",
@@ -386,8 +387,7 @@ DATA len=7
         "Accept-Language": "en-US,en;q=0.9",
         "Sec-Fetch-Dest": "document",
         "Sec-Fetch-Mode": "navigate",
-        "Sec-Fetch-Site": "none",
-        "Sec-Fetch-User": "?1"
+        "Sec-Fetch-Site": "none"
       },
       "order": [
         {
@@ -423,7 +423,8 @@ DATA len=7
           "value": "gzip, deflate, br, zstd"
         }
       ],
-      "image_accept": "image/webp,image/avif,image/jxl,image/heic,image/heic-sequence,video/*;q=0.8,image/png,image/svg+xml,image/*;q=0.8,*/*;q=0.5"
+      "image_accept": "image/webp,image/avif,image/jxl,image/heic,image/heic-sequence,video/*;q=0.8,image/png,image/svg+xml,image/*;q=0.8,*/*;q=0.5",
+      "full_encoding_over_http": "never"
     },
     "protocols": {
       "http3": true
