@@ -194,6 +194,12 @@ class Preset:
     CHROME_155_IOS = "chrome-155-ios"
     CHROME_155_ANDROID = "chrome-155-android"
 
+    # Chrome 156 (desktop only: the brand list reorders, GREASE leads; mobile stays on 155)
+    CHROME_156 = "chrome-156"
+    CHROME_156_WINDOWS = "chrome-156-windows"
+    CHROME_156_LINUX = "chrome-156-linux"
+    CHROME_156_MACOS = "chrome-156-macos"
+
     # Chrome 152 (trust anchors, plus a greased signature algorithm on TCP)
     CHROME_152 = "chrome-152"
     CHROME_152_WINDOWS = "chrome-152-windows"

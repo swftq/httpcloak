@@ -1222,6 +1222,12 @@ export const Preset: {
   CHROME_155_IOS: string;
   CHROME_155_ANDROID: string;
 
+  // Chrome 156 (desktop only: the brand list reorders, GREASE leads; mobile stays on 155)
+  CHROME_156: string;
+  CHROME_156_WINDOWS: string;
+  CHROME_156_LINUX: string;
+  CHROME_156_MACOS: string;
+
   // Chrome 152 (trust anchors, plus a greased signature algorithm on TCP)
   CHROME_152: string;
   CHROME_152_WINDOWS: string;

@@ -29,6 +29,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   The priority table on a preset that announces `SETTINGS_NO_RFC7540_PRIORITIES` now drives the priority header only, never priority fields on HEADERS. A new preset field, `priority_always_urgency`, writes the urgency even at its default, `u=3, i`, as Safari does; Chrome writes `i`. The Python, Node and .NET preset constants gain `safari-26` and `safari-26-ios`.
 
+- **Chrome 156 presets**: `chrome-156`, `chrome-156-windows`, `chrome-156-linux` and `chrome-156-macos`, with `chrome-latest`, `chrome-latest-windows`, `chrome-latest-linux` and `chrome-latest-macos` moved onto them. From a capture of Chrome 156.0.8078.48 on Windows 11 against this library's `chrome-155`, both processes in one proxy session, across four hosts. Three fields move:
+  - the User-Agent's Chrome token, `155.0.0.0` to `156.0.0.0`.
+  - the brand list. **The GREASE brand moves to the front**, and its name and version move with it: `"Not(A:Brand";v="24"` last becomes `"Not:A-Brand";v="8"` first. Chromium varies all three per release, so a bump that edits only the major number ships two wrong brands in the wrong order.
+  - `sec-ch-ua-full-version-list`, to `156.0.8078.48`, in that same new brand order. `sec-ch-ua-full-version` is derived from the list and needs no entry of its own: the derivation skips the GREASE brand wherever it sits, so the reorder does not turn it into `8.0.0.0`.
+
+  Checked and unchanged: the document, image, style and script Accepts, Accept-Encoding, the thirteen-slot navigation order, the ClientHello and the HTTP/2 settings. `sec-ch-ua-platform-version` is `"19.0.0"` on both and comes from the platform default rather than from any preset file. The capture is Windows'; Linux and macOS take the measured delta on their own base, since the brand lists are platform independent on desktop Chrome and the User-Agent's platform token is their 155 file's own. `chrome-latest-android` and `chrome-latest-ios` stay on 155, because Android's User-Agent carries a device model and iOS's a full build number and neither is derivable from a desktop capture. The Python, Node and .NET preset constants gain the four names.
+
 ### Changed
 
 - **`HTTP3Transport.RoundTrip` sends the headers it is given**: called directly, rather than through `Transport` or `client.Client`, it used to fill in every preset header the request lacked, and the preset's User-Agent when the request had none. It now sends the request's headers as they are, as the HTTP/1.1 and HTTP/2 paths do. Code that relied on the fill-in should set those headers itself.

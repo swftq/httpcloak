@@ -1,0 +1,4 @@
+# The wire goldens are compared byte for byte against output built with "
+",
+# so a CRLF checkout fails every one of them. Keep them LF on every platform.
+*.golden text eol=lf

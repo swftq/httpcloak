@@ -3402,6 +3402,79 @@ func IOSChrome155() *Preset {
 	return IOSChrome152()
 }
 
+// Chrome156Windows returns Chrome 156 on Windows.
+//
+// Three fields move from 155 and nothing else does. Measured on 156.0.8078.48
+// against this library's chrome-155 preset, one powhttp session holding the
+// browser and the candidate, on billetterie.psg.fr, www.fandom.com,
+// my.nordaccount.com and evade.rs:
+//
+//   - the User-Agent's Chrome token, 155.0.0.0 to 156.0.0.0.
+//   - the brand list. **The GREASE brand moved to the front**, and its name
+//     and version moved with it: `"Not(A:Brand";v="24"` last becomes
+//     `"Not:A-Brand";v="8"` first. Chromium varies all three per release, so a
+//     version bump that edits only the number ships two wrong brands in the
+//     wrong order.
+//   - the full-version list, to 156.0.8078.48, in that same new brand order.
+//
+// Checked and unchanged: the document Accept (155 had already added
+// image/jxl), the image Accept, the style and script Accepts, Accept-Encoding,
+// and the thirteen-slot navigation order. `sec-ch-ua-platform-version` is
+// "19.0.0" in both and comes from defaultClientHintPlatformVersion rather than
+// from any preset file. `sec-ch-ua-full-version` is derived from the
+// full-version list and needs no entry of its own: browserFullVersion skips the
+// GREASE brand wherever it sits, so the reorder does not reach it.
+//
+// Falls back to Chrome155Windows if the JSON didn't load.
+func Chrome156Windows() *Preset {
+	if p := LookupCustom("chrome-156-windows"); p != nil {
+		return p
+	}
+	return Chrome155Windows()
+}
+
+// Chrome156Linux returns Chrome 156 on Linux. See Chrome156Windows for what
+// moved.
+//
+// The capture is Windows'. The brand list and the full-version list are
+// platform independent on desktop Chrome and the User-Agent's platform token is
+// chrome-155-linux's own, so this is the measured delta applied to the Linux
+// base rather than a second measurement.
+func Chrome156Linux() *Preset {
+	if p := LookupCustom("chrome-156-linux"); p != nil {
+		return p
+	}
+	return Chrome155Linux()
+}
+
+// Chrome156macOS returns Chrome 156 on macOS. See Chrome156Linux for what is
+// measured and what is derived.
+func Chrome156macOS() *Preset {
+	if p := LookupCustom("chrome-156-macos"); p != nil {
+		return p
+	}
+	return Chrome155macOS()
+}
+
+// Chrome156 returns the Chrome 156 fingerprint preset auto-detected from the
+// running OS.
+func Chrome156() *Preset {
+	switch GetPlatformInfo().Platform {
+	case "Windows":
+		return Chrome156Windows()
+	case "macOS":
+		return Chrome156macOS()
+	default:
+		return Chrome156Linux()
+	}
+}
+
+// There is deliberately no AndroidChrome156 or IOSChrome156. Android's
+// User-Agent carries a device model and iOS's a full build number, and neither
+// is derivable from a desktop capture — the reasoning above IOSChrome155
+// applies to both. chrome-latest-android and chrome-latest-ios stay on 155
+// until a capture of each lands.
+
 // IOSChrome143 returns Chrome 143 on iOS fingerprint preset
 // Note: iOS Chrome uses WebKit (Apple requirement), so it has Safari's TLS AND HTTP/2 fingerprint
 // WebKit doesn't support Client Hints, so no sec-ch-ua headers
@@ -4041,6 +4114,10 @@ var presets = map[string]func() *Preset{
 	"chrome-155-macos":    Chrome155macOS,
 	"chrome-155-ios":      IOSChrome155,
 	"chrome-155-android":  AndroidChrome155,
+	"chrome-156":          Chrome156,
+	"chrome-156-windows":  Chrome156Windows,
+	"chrome-156-linux":    Chrome156Linux,
+	"chrome-156-macos":    Chrome156macOS,
 	"chrome-151":          Chrome151,
 	"chrome-151-windows":  Chrome151Windows,
 	"chrome-151-linux":    Chrome151Linux,
@@ -4048,14 +4125,15 @@ var presets = map[string]func() *Preset{
 	"chrome-151-ios":      IOSChrome151,
 	"chrome-151-android":  AndroidChrome151,
 
-	// -latest aliases (always point to the newest version). All of Chrome
-	// tracks 155. iOS only moves when a capture lands, because the iOS
-	// User-Agent carries a full build number that cannot be derived from the
-	// major version (see the note above IOSChrome143).
-	"chrome-latest":          Chrome155,
-	"chrome-latest-windows":  Chrome155Windows,
-	"chrome-latest-linux":    Chrome155Linux,
-	"chrome-latest-macos":    Chrome155macOS,
+	// -latest aliases (always point to the newest version). Desktop Chrome
+	// tracks 156; iOS and Android stay on 155 and only move when a capture
+	// lands, because their User-Agents carry a full build number and a device
+	// model that cannot be derived from the major version (see the note above
+	// IOSChrome143).
+	"chrome-latest":          Chrome156,
+	"chrome-latest-windows":  Chrome156Windows,
+	"chrome-latest-linux":    Chrome156Linux,
+	"chrome-latest-macos":    Chrome156macOS,
 	"firefox-latest":         Firefox148,
 	"firefox-latest-windows": Firefox148Windows,
 	"firefox-latest-linux":   Firefox148Linux,

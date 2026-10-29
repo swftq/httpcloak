@@ -111,12 +111,14 @@ func TestChrome155AcceptAddsJXL(t *testing.T) {
 // Chrome sends its real build in sec-ch-ua-full-version-list, never the reduced
 // N.0.0.0 its User-Agent carries, so a derived 155.0.0.0 is a value no Chrome
 // sends. 155.0.8059.39 is the build the Accept change above was measured on,
-// so the desktop 155 presets, and the -latest aliases on them, carry it.
-// Android was not measured and keeps the derived list.
+// so the desktop 155 presets carry it. Android was not measured and keeps the
+// derived list.
+//
+// The -latest aliases were asserted here too, until desktop moved to 156. They
+// are in chrome156_test.go now, against 156's own build.
 func TestChrome155FullVersionList(t *testing.T) {
 	const want = `"Google Chrome";v="155.0.8059.39", "Chromium";v="155.0.8059.39", "Not(A:Brand";v="24.0.0.0"`
-	for _, name := range []string{"chrome-155-windows", "chrome-155-linux", "chrome-155-macos",
-		"chrome-latest", "chrome-latest-windows", "chrome-latest-linux", "chrome-latest-macos"} {
+	for _, name := range []string{"chrome-155-windows", "chrome-155-linux", "chrome-155-macos"} {
 		if got := Get(name).ResolveClientHints().UAFullVersionList; got != want {
 			t.Errorf("%s: sec-ch-ua-full-version-list = %s, want %s", name, got, want)
 		}
@@ -178,28 +180,9 @@ func TestChrome154HasNoIOSPresetYet(t *testing.T) {
 	}
 }
 
-// The -latest aliases move as a set. This is the single home
-// for the assertion; move it to the next version's file rather than copying it.
-func TestChrome155LatestAliases(t *testing.T) {
-	for _, tc := range []struct{ alias, wantUA string }{
-		{"chrome-latest", "Chrome/155.0.0.0"},
-		{"chrome-latest-windows", "Chrome/155.0.0.0"},
-		{"chrome-latest-linux", "Chrome/155.0.0.0"},
-		{"chrome-latest-macos", "Chrome/155.0.0.0"},
-		{"chrome-latest-android", "Chrome/155.0.0.0"},
-		{"chrome-latest-ios", "CriOS/155.0.8059.37"},
-		{"ios-chrome-latest", "CriOS/155.0.8059.37"},
-	} {
-		p := GetStrict(tc.alias)
-		if p == nil {
-			t.Errorf("%s not registered", tc.alias)
-			continue
-		}
-		if !strings.Contains(p.UserAgent, tc.wantUA) {
-			t.Errorf("%s: UA = %q, want it to contain %q", tc.alias, p.UserAgent, tc.wantUA)
-		}
-	}
-}
+// The -latest aliases moved to chrome156_test.go when desktop moved to 156,
+// which is what the note that used to sit here asked for: one home for the
+// assertion, carried forward rather than copied.
 
 func sortedHex(p *Preset) []string {
 	out := anchorHex(p)
