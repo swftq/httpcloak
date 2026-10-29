@@ -459,7 +459,8 @@ body "{\"k\":1}"
           "key": "priority",
           "value": "u=0, i"
         }
-      ]
+      ],
+      "full_encoding_over_http": "loopback"
     },
     "protocols": {
       "http3": false

@@ -360,7 +360,8 @@ body "{\"k\":1}"
           "key": "sec-fetch-user",
           "value": "?1"
         }
-      ]
+      ],
+      "full_encoding_over_http": "loopback"
     },
     "protocols": {
       "http3": false

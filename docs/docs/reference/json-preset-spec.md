@@ -486,6 +486,7 @@ The HTTP request header bundle. User-Agent, all the named values, and the exact 
 | `values` | object (string→string) | Header values keyed by lowercase header name. Merged with the inherited `values` from `based_on`. |
 | `order` | array of `{key, value}` | The exact header order on the wire. Lowercase keys. An empty `value` means "use the value from `values` or `user_agent`". |
 | `image_accept` | string | The `Accept` header for image loads. Navigation carries its `Accept` in `order`, but image requests are built elsewhere and need their own value. Optional and inherited through `based_on`; empty means the pre-155 value, `image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8`. The Chrome 155 presets set `image/jxl,image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8`. |
+| `full_encoding_over_http` | string | Which plain `http://` requests still carry the preset's own `accept-encoding`; the rest send `gzip, deflate`. `loopback` (Chrome, Firefox): only a request to `localhost`, a name under `.localhost`, `127.0.0.0/8` or `::1`. `never` (Safari, and every browser on iOS): none, localhost included. `always`: every one, for a client whose list does not depend on the transport. HTTPS always carries the preset's value. Omitted derives it from `user_agent`, and `describe` always writes it out. |
 
 Order matters. HTTP/2 and HTTP/3 don't enforce header order on the receiving side, but bot-detection products fingerprint it. Real Chrome and real Firefox sit far apart on this dimension.
 

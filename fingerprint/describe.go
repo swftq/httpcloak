@@ -219,6 +219,10 @@ func flattenHeaders(p *Preset) *HeaderSpec {
 	// default out would pin it on a described preset that should keep
 	// following ResolveImageAccept.
 	out.ImageAccept = p.ImageAccept
+	// Always the resolved rule. It is derived from the User-Agent, so a loaded
+	// copy whose User-Agent is then edited keeps the rule it was described
+	// with instead of re-deriving one.
+	out.FullEncodingOverHTTP = p.ResolveFullEncodingOverHTTP()
 	return out
 }
 

@@ -39,6 +39,8 @@ The lib also auto-rewrites the `sec-fetch-*` cluster based on the kind of reques
 
 A frame's navigation keeps navigation mode but drops `sec-fetch-user`. Set `Sec-Fetch-Mode: navigate` with a `Sec-Fetch-Dest` other than `document` (`iframe`, `frame`) and the request goes out without it, as Chrome sends an iframe loading its `src`: `sec-fetch-user` asserts a person started the navigation, and nobody clicked. For a click inside a frame, set `Sec-Fetch-User: ?1` yourself.
 
+Over plain `http://`, `accept-encoding` drops to `gzip, deflate` where the browser drops it. Chrome and Firefox keep their full list only for a loopback host (`localhost`, a name under `.localhost`, `127.0.0.0/8` or `::1`). Safari, and every browser on iOS, sends `gzip, deflate` on every plain-HTTP request, localhost included. HTTPS always carries the preset's own list. A custom preset can change the rule with [`headers.full_encoding_over_http`](../reference/json-preset-spec.md#headers-object).
+
 ## Setting custom headers
 
 Two scopes: per-request, or session-wide as a default.

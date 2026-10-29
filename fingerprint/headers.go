@@ -2,6 +2,7 @@ package fingerprint
 
 import (
 	"fmt"
+	"net/netip"
 	"net/url"
 	"strings"
 
@@ -570,6 +571,95 @@ func (p *Preset) ResolveImageAccept() string {
 		return p.ImageAccept
 	}
 	return legacyImageAccept
+}
+
+// PlainHTTPAcceptEncoding is the Accept-Encoding Chrome, Firefox and Safari
+// send on a plain-HTTP request that does not get their full list. It does not
+// follow the full list: Chrome builds it from the two encodings it always
+// supports, Firefox reads network.http.accept-encoding, Safari's comes from
+// CFNetwork, and all three come to exactly this.
+const PlainHTTPAcceptEncoding = "gzip, deflate"
+
+// Values for Preset.FullEncodingOverHTTP. Over TLS every preset sends its own
+// Accept-Encoding; these say where it still goes over plain HTTP.
+const (
+	// FullEncodingLoopback sends it only to a loopback host, which Chrome and
+	// Firefox treat like a secure transport. Chrome 156 decides in
+	// HttpRequestHeaders::SetAcceptEncodingIfMissing (a cryptographic scheme or
+	// net::IsLocalhost), Firefox 159 in HttpBaseChannel's
+	// isSecureOrTrustworthyURL. Both sent gzip, deflate to a LAN address and
+	// their full list to localhost from the same page.
+	FullEncodingLoopback = "loopback"
+
+	// FullEncodingNever sends it on no plain-HTTP request, localhost included.
+	// Safari 26.3 sent gzip, deflate on all 49 of its plain-HTTP requests to
+	// localhost, on macOS and iOS, and its full list on every TLS one. The
+	// list comes from CFNetwork, which every iOS browser shares; the earlier
+	// Safari and the iOS Chrome presets follow 26.3 on that basis, with no
+	// plain-HTTP capture of their own.
+	FullEncodingNever = "never"
+
+	// FullEncodingAlways sends it on every request, for a client whose list
+	// does not depend on the transport.
+	FullEncodingAlways = "always"
+)
+
+// ResolveFullEncodingOverHTTP returns the preset's FullEncodingOverHTTP, or
+// derives it from the User-Agent's engine when the preset leaves it empty.
+// Chromium and Gecko are FullEncodingLoopback. WebKit, meaning Safari and
+// every browser on iOS, none of which carries a Chrome/ or Firefox/ token, is
+// FullEncodingNever. Anything else, a curl or okhttp mirror say, is
+// FullEncodingAlways.
+func (p *Preset) ResolveFullEncodingOverHTTP() string {
+	if p == nil {
+		return FullEncodingAlways
+	}
+	if p.FullEncodingOverHTTP != "" {
+		return p.FullEncodingOverHTTP
+	}
+	switch ua := p.UserAgent; {
+	case strings.Contains(ua, "Chrome/"), strings.Contains(ua, "Firefox/"):
+		return FullEncodingLoopback
+	case strings.Contains(ua, "AppleWebKit/"):
+		return FullEncodingNever
+	}
+	return FullEncodingAlways
+}
+
+// SendsFullEncodingTo reports whether a request to u carries the preset's own
+// Accept-Encoding rather than PlainHTTPAcceptEncoding. Browsers decide on each
+// request's own URL, not on the page that made it: Chrome and Firefox sent
+// their full list to an image on http://localhost from a page on a LAN
+// address, and gzip, deflate to an image on that address from a localhost
+// frame.
+func (p *Preset) SendsFullEncodingTo(u *url.URL) bool {
+	if u == nil || !strings.EqualFold(u.Scheme, "http") {
+		return true
+	}
+	switch p.ResolveFullEncodingOverHTTP() {
+	case FullEncodingNever:
+		return false
+	case FullEncodingLoopback:
+		return isLoopbackHost(u.Hostname())
+	}
+	return true
+}
+
+// isLoopbackHost reports whether host is a loopback host as Chrome
+// (net::IsLocalhost) and Firefox (IsPotentiallyTrustworthyLoopbackHost) both
+// read it: localhost or a name under .localhost, in any case and with or
+// without a trailing dot, an IPv4 literal in 127.0.0.0/8, or exactly ::1.
+// Neither browser counts an IPv4-mapped ::ffff:127.0.0.1, which
+// net.IP.IsLoopback would.
+func isLoopbackHost(host string) bool {
+	if addr, err := netip.ParseAddr(host); err == nil {
+		if addr.Is4() {
+			return addr.As4()[0] == 127
+		}
+		return addr == netip.IPv6Loopback()
+	}
+	host = strings.ToLower(strings.TrimSuffix(host, "."))
+	return host == "localhost" || strings.HasSuffix(host, ".localhost")
 }
 
 // NewHeaderCoherence creates a new HeaderCoherence helper

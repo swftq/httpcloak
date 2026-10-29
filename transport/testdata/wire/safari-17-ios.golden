@@ -280,7 +280,8 @@ body "{\"k\":1}"
           "key": "user-agent",
           "value": ""
         }
-      ]
+      ],
+      "full_encoding_over_http": "never"
     },
     "protocols": {
       "http3": false

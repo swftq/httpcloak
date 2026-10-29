@@ -423,7 +423,8 @@ body "{\"k\":1}"
           "key": "te",
           "value": "trailers"
         }
-      ]
+      ],
+      "full_encoding_over_http": "loopback"
     },
     "protocols": {
       "http3": false

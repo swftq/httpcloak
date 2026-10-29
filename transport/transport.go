@@ -3161,6 +3161,14 @@ func applyPresetHeaders(httpReq *http.Request, wire *presetWireHeaders, customHe
 			httpReq.Header[p.key] = values[len(values)-1 : len(values) : len(values)]
 		}
 
+		// Over plain HTTP a browser keeps br and zstd for the hosts it trusts
+		// like a secure transport and sends gzip, deflate to the rest; see
+		// Preset.SendsFullEncodingTo for each browser's rule. Only the preset's
+		// value changes: caller headers are merged after this and still win.
+		if _, ok := httpReq.Header["Accept-Encoding"]; ok && !preset.SendsFullEncodingTo(httpReq.URL) {
+			httpReq.Header["Accept-Encoding"] = []string{fingerprint.PlainHTTPAcceptEncoding}
+		}
+
 		// Auto-detect CORS mode from the request shape. Real browsers use
 		// cors/empty Sec-Fetch-* for fetch()/XHR and navigate/document for
 		// top-level navigations + classic <form> POSTs; infer which one this
