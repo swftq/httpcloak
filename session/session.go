@@ -307,6 +307,7 @@ func (s *Session) requestWithRedirects(ctx context.Context, req *transport.Reque
 		reqCopy := *req
 		reqCopy.Headers = cloneHeaders(req.Headers)
 		req = &reqCopy
+		s.pinPageFetchHeaders(req)
 
 		// Derive a replay source before anything reads the body. Without one, a
 		// 307/308 hop and a retried attempt both re-send an exhausted reader:
@@ -2022,6 +2023,7 @@ func (s *Session) RequestStream(ctx context.Context, req *transport.Request) (*S
 	reqCopy := *req
 	reqCopy.Headers = cloneHeaders(req.Headers)
 	req = &reqCopy
+	s.pinPageFetchHeaders(req)
 
 	s.mu.Lock()
 	if !s.active {
