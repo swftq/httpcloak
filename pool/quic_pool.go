@@ -622,6 +622,8 @@ func (p *QUICHostPool) createConn(ctx context.Context) (*QUICConn, error) {
 			if err != nil {
 				return nil, err
 			}
+			// early_data only on a ticket that allows it, as above
+			h3build.DropEarlyDataUnlessAllowed(spec, p.preset, session)
 			c.CachedClientHelloSpec = spec
 		}
 		return c, nil
