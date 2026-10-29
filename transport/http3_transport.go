@@ -1236,7 +1236,7 @@ func (t *HTTP3Transport) happyEyeballsDialQUIC(ctx context.Context, addrs []*net
 			// ApplyPreset, so a shared one is corrupted by the racing dial.
 			return t.dialDirect(rctx, addrs[idx], tlsCfg, makeConfig())
 		},
-		func(c *quic.Conn) { c.CloseWithError(0, "lost happy-eyeballs race") },
+		t.dropDirectConn,
 	)
 }
 
@@ -1317,6 +1317,28 @@ func (t *HTTP3Transport) dialDirect(ctx context.Context, addr *net.UDPAddr, tlsC
 		sock.close()
 	})
 	return conn, nil
+}
+
+// dropDirectConn ends a direct connection without a word to the server. A
+// Happy Eyeballs race uses it for an attempt that finished its handshake after
+// another attempt had won. Closing the connection's own quic.Transport destroys
+// it without sending CONNECTION_CLOSE, which is how Chromium drops a QUIC
+// session it no longer needs (SILENT_CLOSE, in QuicSessionAttempt::Cancel and
+// for a session that finishes after its attempt went away). An attempt still
+// in its handshake when the race ends already went that way, since quic-go
+// destroys a dial whose context is cancelled. Losers that completed used to be
+// closed with CloseWithError, which sent the server an application
+// CONNECTION_CLOSE with this library's own reason phrase.
+func (t *HTTP3Transport) dropDirectConn(conn *quic.Conn) {
+	t.liveMu.Lock()
+	sock := t.sockets[conn]
+	delete(t.sockets, conn)
+	t.liveMu.Unlock()
+	// No socket means the connection has already ended, or closeDirectConns
+	// has taken it and is closing it.
+	if sock != nil {
+		sock.close()
+	}
 }
 
 // trackOrigin records a live connection under the origin it was dialed for,
