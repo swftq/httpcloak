@@ -384,11 +384,11 @@ func TestClientFirstRequestOrigin(t *testing.T) {
 				})
 				b.wantOrigin(t, "/caller-no-cors-xo", "")
 
-				// With no Referer there is no page to go by. fetch() keeps
-				// sending the target's own origin, as it always has, and no other
-				// mode makes one up.
+				// With no Referer, fetch() takes the target's origin for the
+				// page, so a GET to it goes out same-origin with no Origin, and
+				// no other mode makes one up.
 				followOrigin(t, c, &Request{Method: "GET", URL: a.url + "/cors-get-noref", FetchMode: FetchModeCORS})
-				a.wantOrigin(t, "/cors-get-noref", a.url)
+				a.wantOrigin(t, "/cors-get-noref", "")
 				followOrigin(t, c, &Request{
 					Method: "POST", URL: a.url + "/form-post-noref",
 					Body: strings.NewReader("b=2"), Headers: originHeaders("Content-Type", "application/x-www-form-urlencoded"),
@@ -545,11 +545,12 @@ func TestClientRedirectHopOrigin(t *testing.T) {
 				b.wantOrigin(t, "/land/ncpost-xo", offOrigin(pageOrigin))
 
 				// A fetch() with no Referer takes the target's origin for the
-				// page's, the Origin its first request already sends.
+				// page's. Its first request, a GET to that origin, sends none;
+				// the hops then carry it as any cors chain does.
 				a.redirect("/r/noref-chain", http.StatusFound, b.url+"/r/noref-bounce")
 				b.redirect("/r/noref-bounce", http.StatusFound, a.url+"/land/noref-chain")
 				followOrigin(t, c, &Request{Method: "GET", URL: a.url + "/r/noref-chain", FetchMode: FetchModeCORS})
-				a.wantOrigin(t, "/r/noref-chain", a.url)
+				a.wantOrigin(t, "/r/noref-chain", "")
 				b.wantOrigin(t, "/r/noref-bounce", a.url)
 				a.wantOrigin(t, "/land/noref-chain", "null")
 

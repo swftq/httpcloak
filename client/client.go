@@ -490,7 +490,7 @@ const (
 type FetchSite int
 
 const (
-	FetchSiteAuto       FetchSite = iota // Auto-detect based on Referer header
+	FetchSiteAuto       FetchSite = iota // Auto-detect from the Referer, or else the caller's Origin
 	FetchSiteNone                        // Direct navigation (typed URL, bookmark)
 	FetchSiteSameOrigin                  // Same origin request
 	FetchSiteSameSite                    // Same site but different subdomain
@@ -616,6 +616,20 @@ func getHeaderCaseInsensitive(headers map[string][]string, key string) ([]string
 		}
 	}
 	return nil, false
+}
+
+// requestPage returns what names the page a request comes from, which its
+// Sec-Fetch-Site is worked out from: the Referer it goes out with (see
+// requestReferer), or with none the Origin the caller set. "" means the
+// request names no page.
+func requestPage(req *Request) string {
+	if referer := requestReferer(req); referer != "" {
+		return referer
+	}
+	if v, ok := getHeaderCaseInsensitive(req.Headers, "Origin"); ok && len(v) > 0 {
+		return v[0]
+	}
+	return ""
 }
 
 // Response represents an HTTP response
@@ -2132,7 +2146,7 @@ func applyModeHeaders(httpReq *http.Request, preset *fingerprint.Preset, req *Re
 
 	// THEN: Set Sec-Fetch-Site based on the ACTUAL mode
 	// sec-fetch-site: none is ONLY valid for navigation, never for CORS
-	secFetchSite := detectSecFetchSiteForMode(req.FetchSite, parsedURL, requestReferer(req), effectiveMode)
+	secFetchSite := detectSecFetchSiteForMode(req.FetchSite, parsedURL, requestPage(req), effectiveMode)
 	httpReq.Header.Set("Sec-Fetch-Site", secFetchSite)
 
 	// Apply mode-specific headers - EVERYTHING is coherent
@@ -2528,17 +2542,27 @@ func detectSecFetchSiteForMode(fetchSite FetchSite, requestURL *url.URL, referer
 		return "cross-site"
 	}
 
-	// Auto-detect based on Referer
+	// Auto-detect from the page the request names: its Referer, or the Origin
+	// the caller set (see requestPage)
 	if referer == "" {
-		// No referer...
-		if mode == FetchModeCORS || mode == FetchModeNoCors {
-			// CORS/NoCors mode: JS/page is running on SOME page, we just don't know which
-			// Default to "cross-site" since most API calls are cross-origin
-			// (same-origin fetch would typically have a Referer)
+		switch mode {
+		case FetchModeCORS:
+			// No page is named, so the target's origin stands in for it: a
+			// fetch() to its own origin from a page that sends no Referer.
+			// That needs no page origin made up. The cross-site default this
+			// replaces came beside an Origin of the target's own, which no
+			// browser sends, and Go's CrossOriginProtection refused its POSTs.
+			return "same-origin"
+		case FetchModeNoCors:
+			// NoCors mode: the page is SOME page, we just don't know which
 			return "cross-site"
 		}
 		// Navigation mode: direct navigation (typed URL, bookmark)
 		return "none"
+	}
+	if referer == "null" {
+		// An opaque origin, the caller's Origin: null, is cross-site to every URL
+		return "cross-site"
 	}
 
 	refererURL, err := url.Parse(referer)
