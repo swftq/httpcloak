@@ -648,11 +648,14 @@ func (h *HeaderCoherence) GenerateNavigationHeaders() map[string]string {
 func (h *HeaderCoherence) GenerateXHRHeaders(referrer, targetURL string) map[string]string {
 	headers := make(map[string]string)
 
-	// Start with basic headers
+	// Start with basic headers. Accept-Encoding and Accept-Language are the
+	// preset's, because a browser sends fetch() and XHR the same pair as every
+	// other request; Chrome's values are only the fallback for a preset
+	// without them.
 	headers["User-Agent"] = h.preset.UserAgent
 	headers["Accept"] = "*/*"
-	headers["Accept-Encoding"] = "gzip, deflate, br, zstd"
-	headers["Accept-Language"] = "en-US,en;q=0.9"
+	headers["Accept-Encoding"] = firstNonEmpty(h.preset.Headers["Accept-Encoding"], "gzip, deflate, br, zstd")
+	headers["Accept-Language"] = firstNonEmpty(h.preset.Headers["Accept-Language"], "en-US,en;q=0.9")
 
 	// Copy client hints from preset (low-entropy only for XHR)
 	if ua, ok := h.preset.Headers["sec-ch-ua"]; ok {
