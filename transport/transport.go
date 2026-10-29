@@ -3421,6 +3421,50 @@ func statedCORS(initiator string, userHeaders map[string][]string) bool {
 	return initiator != "" && headerVal(userHeaders, "Sec-Fetch-Mode") == "" && headerVal(userHeaders, "Sec-Fetch-Dest") == ""
 }
 
+// FetchMode returns the Sec-Fetch-Mode req goes out with on this transport,
+// lowercased, or "" when it goes out with none.
+//
+// A Sec-Fetch-Mode the caller set wins, from Headers or, under ExactHeaders,
+// from the list, which is then the only place one can come from. Otherwise it
+// is what applyPresetHeaders writes: "cors" for a request sniffXHRMode reads as
+// fetch-shaped, and the preset's own value, a navigation's, for anything else.
+// A TLS-only request writes none, and neither does a preset that sends no
+// Sec-Fetch-*.
+//
+// The session reads it to give each redirect hop the Origin a browser's request
+// of that mode would carry, so the two headers agree on the wire.
+func (t *Transport) FetchMode(req *Request) string {
+	if len(req.ExactHeaders) > 0 {
+		for _, hp := range req.ExactHeaders {
+			if strings.EqualFold(hp.Key, "Sec-Fetch-Mode") {
+				return strings.ToLower(hp.Value)
+			}
+		}
+		return ""
+	}
+	if v := headerVal(req.Headers, "Sec-Fetch-Mode"); v != "" {
+		return strings.ToLower(v)
+	}
+	tlsOnly := t.tlsOnly
+	if req.TLSOnly != nil {
+		tlsOnly = *req.TLSOnly
+	}
+	preset := t.getPreset()
+	if tlsOnly || preset == nil {
+		return ""
+	}
+	wire := t.wireHeaders(preset)
+	if wire.sendsSecFetch && sniffXHRMode(req.Method, req.Headers) {
+		return "cors"
+	}
+	for _, p := range wire.pairs {
+		if p.key == "Sec-Fetch-Mode" {
+			return strings.ToLower(p.value)
+		}
+	}
+	return ""
+}
+
 func headerVal(h map[string][]string, name string) string {
 	if h == nil {
 		return ""

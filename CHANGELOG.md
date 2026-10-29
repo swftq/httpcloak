@@ -117,6 +117,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   WebKit's source works it out the same way. A site is the scheme plus the registrable domain from the public suffix list, so one host over http and https is two sites, and two ports on one host are one.
 
   Only a value you set can move. A preset's own value is `none` for a navigation and `cross-site` for a request sniffed as `fetch()`, and a hop changes neither. With `ExactHeaders`, a `Sec-Fetch-Site` pair takes the hop's value in its own slot and spelling, because the transport never reads the hop's headers in that mode. A list without the pair gains none.
+### Fixed
+
+- **A redirect hop carries the `Origin` a browser sends there**: the session copied a caller-set `Origin` unchanged onto every hop and never added one. Chrome 156 and Firefox 159 were captured on redirected `fetch()`, XHR, no-cors `fetch()`, iframe and form requests, with 302, 303, 307 and 308, within one origin, out to a second origin and back, and from https to http, over HTTP/1.1 and HTTP/2. Neither browser copies `Origin`. Each works it out again for every hop, as Fetch's HTTP-redirect fetch does:
+
+  - A `fetch()` or XHR to the page's own origin sends no `Origin`, and gains the page's origin on a hop to another origin, https to http included.
+  - A hop that leaves another origin for a third one or comes back sends `Origin: null` (Fetch's tainted origin), and so does every hop after it.
+  - The GET after a 303 carries none, unless it is a `fetch()` or XHR that has gone to another origin.
+  - Navigation and iframe GET hops carry none.
+  - A form or no-cors POST keeps the page's origin through a 307 or 308 within that origin, and sends `null` on an https to http hop. Redirected to another origin, it went out with `null` from Chrome, whose network stack does that on every cross-origin redirect, and with the page's origin from Firefox, as Fetch says. Chrome and Android Chrome presets follow Chrome there; the Firefox, Safari and iOS Chrome presets follow Fetch. Safari could not be captured, but WebKit's loader makes the origin opaque on the same hops.
+
+  The `Sec-Fetch-Mode` a chain's first request goes out with, the caller's or the one the transport infers from the request's shape, decides which rule applies. The page's origin is the `Origin` on that request, or else its URL's origin, since a browser sends a same-origin `fetch()` GET without one. When a 303 turned an inferred `fetch()`-style POST into a bare GET, the inference sent that GET as a navigation with a navigation's `Accept`, where both browsers kept cors mode. It now keeps cors mode too. A request that goes out with no `Sec-Fetch-Mode` at all, a TLS-only one for instance, keeps the caller's `Origin` unchanged on its hops. With `ExactHeaders`, an `Origin` pair follows the same rule in its own slot and spelling. A list without one gains none, and a list without a `Sec-Fetch-Mode` pair goes out as given.
 
 ## [1.7.3] - 2026-10-14
 
