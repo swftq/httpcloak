@@ -3454,7 +3454,7 @@ func (t *Transport) FetchMode(req *Request) string {
 		return ""
 	}
 	wire := t.wireHeaders(preset)
-	if wire.sendsSecFetch && sniffXHRMode(req.Method, req.Headers) {
+	if wire.sendsSecFetch && (statedCORS(req.Initiator, req.Headers) || sniffXHRMode(req.Method, req.Headers)) {
 		return "cors"
 	}
 	for _, p := range wire.pairs {
@@ -3508,7 +3508,7 @@ func sentFetchDest(wire *presetWireHeaders, tlsOnly bool, req *Request) string {
 	if tlsOnly || !wire.sendsSecFetch {
 		return ""
 	}
-	if sniffXHRMode(cmp.Or(req.Method, "GET"), req.Headers) {
+	if statedCORS(req.Initiator, req.Headers) || sniffXHRMode(cmp.Or(req.Method, "GET"), req.Headers) {
 		return "empty"
 	}
 	for _, p := range wire.pairs {
