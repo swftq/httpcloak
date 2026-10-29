@@ -207,7 +207,7 @@ func pageFetchMode(wire *presetWireHeaders, req *Request) string {
 	if v := headerVal(req.Headers, "Sec-Fetch-Mode"); v != "" {
 		return strings.ToLower(v)
 	}
-	if sniffXHRMode(req.Method, req.Headers) {
+	if statedCORS(req.Initiator, req.Headers) || sniffXHRMode(req.Method, req.Headers) {
 		return "cors"
 	}
 	for _, p := range wire.pairs {
