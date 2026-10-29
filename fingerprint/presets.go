@@ -525,6 +525,11 @@ type H2FingerprintConfig struct {
 	// what Firefox sends. The HTTP/2 weight stays the "empty" entry's, as
 	// Firefox sends both at 22.
 	XHRPriorityHeader *string
+	// PriorityAlwaysUrgency writes u= in the priority header even at the
+	// default urgency, 3. WebKit does: Safari 26 sends "u=3, i" for a font
+	// or a fetch(). Chromium leaves the default out, and
+	// PriorityHeaderFromResource follows Chromium.
+	PriorityAlwaysUrgency bool
 }
 
 // OtherHeaders, in a header order, marks the place for every header the order
@@ -985,7 +990,22 @@ func (p *Preset) H2PriorityFor(dest string) (weight uint16, exclusive bool, head
 	// Exclusive is a property of the browser, not of the resource: Chromium
 	// sets it on every stream and Firefox on none. It used to be true here
 	// unconditionally, which gave Firefox presets Chromium's flag.
-	return weight, p.HTTP2Settings.StreamExclusive, PriorityHeaderFromResource(rp), true
+	return weight, p.HTTP2Settings.StreamExclusive, p.priorityHeader(rp), true
+}
+
+// priorityHeader renders rp's priority header the way the preset's browser
+// does. That is PriorityHeaderFromResource, Chromium's rule, unless the preset
+// writes the urgency even at its default; see
+// H2FingerprintConfig.PriorityAlwaysUrgency.
+func (p *Preset) priorityHeader(rp ResourcePriority) string {
+	if !rp.EmitHeader || p.H2Config == nil || !p.H2Config.PriorityAlwaysUrgency {
+		return PriorityHeaderFromResource(rp)
+	}
+	v := "u=" + uint8ToASCII(rp.Urgency)
+	if rp.Incremental {
+		v += ", i"
+	}
+	return v
 }
 
 // XHRPriorityHeader returns the priority header an XMLHttpRequest sends, and
@@ -3622,6 +3642,45 @@ func IOSSafari18() *Preset {
 	}
 }
 
+// Safari26 returns Safari 26 on macOS.
+//
+// CAPTURED from Safari 26.3 (21623.2.7.11.6) on macOS 26.3, against a server
+// that logs HTTP/1.1 as sent and every HTTP/2 frame. The ClientHello is
+// safari-18's, so the JSON is a delta on it: the ClientHello hashes to JA3
+// ecdf4f49dd59effc439639da29186671 and the HTTP/2 layer to Akamai
+// c52879e43202aeb92740be6e8c86ea96, both what chrome-155-ios measured on an
+// iPhone, because Chrome on iOS runs on the same WebKit.
+//
+// What moved from 18: SETTINGS 2,3,4,9 with no MAX_FRAME_SIZE, a connection
+// window of 10420225, the pseudo-header order m,s,a,p, no priority fields on
+// any HEADERS frame, and a header order led by sec-fetch-dest and user-agent.
+// Every request carries a priority header, on HTTP/1.1 as well, always
+// incremental: u=0 for documents and frames, u=1 for stylesheets and scripts,
+// u=3 for fonts and fetch(), u=5 for images. An async script goes at u=3,
+// which a per-dest table cannot tell from a parser-blocking one. No request
+// carried Sec-Fetch-User, which WebKit does not implement, and HTTPS
+// navigations carried no Upgrade-Insecure-Requests. The HTTP/3 and QUIC
+// values are 18's, unmeasured for 26.
+func Safari26() *Preset {
+	if p := LookupCustom("safari-26"); p != nil {
+		return p
+	}
+	return Safari18()
+}
+
+// IOSSafari26 returns Safari 26 on iOS.
+//
+// CAPTURED from the iOS 26.3.1 simulator (iPhone 17 Pro) the same way as
+// Safari26, with the same results apart from the User-Agent, which reports
+// iPhone OS 18_7 next to Version/26.3. The simulator runs iOS's own network
+// stack; a device capture has not been compared.
+func IOSSafari26() *Preset {
+	if p := LookupCustom("safari-26-ios"); p != nil {
+		return p
+	}
+	return IOSSafari18()
+}
+
 // AndroidChrome143 returns Chrome 143 on Android fingerprint preset
 // Note: Chrome on Android uses Chrome's TLS fingerprint (not WebKit restricted like iOS)
 func AndroidChrome143() *Preset {
@@ -3930,12 +3989,14 @@ var presets = map[string]func() *Preset{
 	"firefox-148-linux":   Firefox148Linux,
 	"firefox-148-macos":   Firefox148macOS,
 	"safari-18":           Safari18,
+	"safari-26":           Safari26,
 	"chrome-143-ios":      IOSChrome143,
 	"chrome-144-ios":      IOSChrome144,
 	"chrome-145-ios":      IOSChrome145,
 	"chrome-146-ios":      IOSChrome146,
 	"safari-17-ios":       IOSSafari17,
 	"safari-18-ios":       IOSSafari18,
+	"safari-26-ios":       IOSSafari26,
 	"chrome-143-android":  AndroidChrome143,
 	"chrome-144-android":  AndroidChrome144,
 	"chrome-145-android":  AndroidChrome145,
@@ -3999,9 +4060,9 @@ var presets = map[string]func() *Preset{
 	"firefox-latest-windows": Firefox148Windows,
 	"firefox-latest-linux":   Firefox148Linux,
 	"firefox-latest-macos":   Firefox148macOS,
-	"safari-latest":          Safari18,
+	"safari-latest":          Safari26,
 	"chrome-latest-ios":      IOSChrome155,
-	"safari-latest-ios":      IOSSafari18,
+	"safari-latest-ios":      IOSSafari26,
 	"chrome-latest-android":  AndroidChrome155,
 
 	// Backwards compatibility aliases (old naming convention). The -latest
@@ -4015,6 +4076,7 @@ var presets = map[string]func() *Preset{
 	"ios-chrome-148":        IOSChrome148,
 	"ios-safari-17":         IOSSafari17,
 	"ios-safari-18":         IOSSafari18,
+	"ios-safari-26":         IOSSafari26,
 	"android-chrome-143":    AndroidChrome143,
 	"android-chrome-144":    AndroidChrome144,
 	"android-chrome-145":    AndroidChrome145,
@@ -4022,7 +4084,7 @@ var presets = map[string]func() *Preset{
 	"android-chrome-147":    AndroidChrome147,
 	"android-chrome-148":    AndroidChrome148,
 	"ios-chrome-latest":     IOSChrome155,
-	"ios-safari-latest":     IOSSafari18,
+	"ios-safari-latest":     IOSSafari26,
 	"android-chrome-latest": AndroidChrome155,
 }
 

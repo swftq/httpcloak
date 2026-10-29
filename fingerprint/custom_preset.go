@@ -202,6 +202,9 @@ type HTTP2Spec struct {
 	// of a fetch()'s; "" sends none. Omitted sends a fetch()'s. See
 	// H2FingerprintConfig.XHRPriorityHeader.
 	XHRPriorityHeader *string `json:"xhr_priority_header,omitempty"`
+	// PriorityAlwaysUrgency writes u= in the priority header even at the
+	// default urgency; see H2FingerprintConfig.PriorityAlwaysUrgency.
+	PriorityAlwaysUrgency *bool `json:"priority_always_urgency,omitempty"`
 }
 
 // ResourcePrioritySpec is the JSON shape of fingerprint.ResourcePriority.
@@ -1110,7 +1113,8 @@ func applyHTTP2(p *Preset, spec *HTTP2Spec) error {
 		spec.DataFrameMaxSize != nil || spec.PrefacePingIdleMs != nil ||
 		spec.PrefacePingHangMs != nil || spec.IdlePingMs != nil ||
 		spec.PriorityModel != nil || spec.PriorityOverHTTP1 != nil ||
-		spec.XHRPriorityHeader != nil {
+		spec.XHRPriorityHeader != nil ||
+		spec.PriorityAlwaysUrgency != nil {
 		if p.H2Config == nil {
 			p.H2Config = &H2FingerprintConfig{}
 		}
@@ -1193,6 +1197,9 @@ func applyHTTP2(p *Preset, spec *HTTP2Spec) error {
 		if spec.XHRPriorityHeader != nil {
 			v := *spec.XHRPriorityHeader
 			p.H2Config.XHRPriorityHeader = &v
+		}
+		if spec.PriorityAlwaysUrgency != nil {
+			p.H2Config.PriorityAlwaysUrgency = *spec.PriorityAlwaysUrgency
 		}
 	}
 

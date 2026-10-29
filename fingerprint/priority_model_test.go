@@ -81,9 +81,11 @@ func TestChromiumPresetsUseTheChromiumPriorityModel(t *testing.T) {
 }
 
 // Which presets put their priority header on HTTP/1.1. Chromium sends none
-// there and Firefox sends the HTTP/2 value; Chrome on iOS has the table model
-// but no measurement says WebKit sends one, and it never has. Every registered
-// preset is checked, so a new one cannot slip through on its name or model.
+// there and Firefox sends the HTTP/2 value. Chrome on iOS runs on WebKit, and
+// WebKit 26 sends it: Safari 26 did on macOS and iOS, so the iOS presets that
+// carry WebKit 26's table, from 148 on, send it too, and the older ones send
+// none. Every registered preset is checked, so a new one cannot slip through
+// on its name or model.
 func TestHTTP1PriorityByPreset(t *testing.T) {
 	for _, name := range Available() {
 		p := GetStrict(name)
@@ -95,6 +97,10 @@ func TestHTTP1PriorityByPreset(t *testing.T) {
 		case strings.HasPrefix(p.Name, "firefox-"):
 			if !got {
 				t.Errorf("%s (%s): Firefox sends its priority header over HTTP/1.1", name, p.Name)
+			}
+		case strings.HasPrefix(p.Name, "chrome-") && strings.HasSuffix(p.Name, "-ios"):
+			if want := p.H2HasPriorityTable(); got != want {
+				t.Errorf("%s (%s): priority over HTTP/1.1 %v, want %v, with the WebKit 26 table", name, p.Name, got, want)
 			}
 		case strings.HasPrefix(p.Name, "chrome-"):
 			if got {

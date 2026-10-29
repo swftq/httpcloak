@@ -142,7 +142,12 @@ func Transport(o Options) *http2.Transport {
 		// Both names are looked up without regard to case, because exact
 		// headers keep them lowercase and Header.Get would miss them.
 		HeaderPriorityFunc: func() func(*http.Request) *http2.PriorityParam {
-			if !p.H2HasPriorityTable() {
+			// A client that announces SETTINGS_NO_RFC7540_PRIORITIES puts no
+			// priority fields on HEADERS. Safari 26 sent none on any of 71
+			// HEADERS frames, macOS and iOS alike, while its priority header
+			// varied per request; a table on such a preset drives only that
+			// header.
+			if !p.H2HasPriorityTable() || p.HTTP2Settings.NoRFC7540Priorities {
 				return nil
 			}
 			chromium := p.H2PriorityModel() == fingerprint.PriorityModelChromium

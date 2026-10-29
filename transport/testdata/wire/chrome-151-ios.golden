@@ -67,7 +67,7 @@ ext GREASE: 00
 connections 1, settings acks 1
 SETTINGS 2=0 3=100 4=2097152 9=1
 WINDOW_UPDATE stream=0 increment=10420225
-HEADERS stream=1 flags=0x25 exclusive=false dep=0 weight=255
+HEADERS stream=1 flags=0x5
   indexed 2                                                    :method: GET
   indexed 7                                                    :scheme: https
   incremental name=1 value-huffman=true                        :authority: 127.0.0.1:PORT
@@ -80,7 +80,7 @@ HEADERS stream=1 flags=0x25 exclusive=false dep=0 weight=255
   incremental name=17 value-huffman=true                       accept-language: en-US,en;q=0.9
   incremental name=literal huffman=true value-huffman=true     priority: u=0, i
   incremental name=16 value-huffman=true                       accept-encoding: gzip, deflate, br, zstd
-HEADERS stream=3 flags=0x25 exclusive=false dep=0 weight=255
+HEADERS stream=3 flags=0x5
   indexed 2                                                    :method: GET
   indexed 7                                                    :scheme: https
   indexed 71                                                   :authority: 127.0.0.1:PORT
@@ -93,7 +93,7 @@ HEADERS stream=3 flags=0x25 exclusive=false dep=0 weight=255
   indexed 65                                                   accept-language: en-US,en;q=0.9
   indexed 64                                                   priority: u=0, i
   indexed 63                                                   accept-encoding: gzip, deflate, br, zstd
-HEADERS stream=5 flags=0x25 exclusive=false dep=0 weight=255
+HEADERS stream=5 flags=0x5
   indexed 2                                                    :method: GET
   indexed 7                                                    :scheme: https
   indexed 72                                                   :authority: 127.0.0.1:PORT
@@ -106,7 +106,7 @@ HEADERS stream=5 flags=0x25 exclusive=false dep=0 weight=255
   indexed 66                                                   accept-language: en-US,en;q=0.9
   indexed 65                                                   priority: u=0, i
   indexed 64                                                   accept-encoding: gzip, deflate, br, zstd
-HEADERS stream=7 flags=0x24 exclusive=false dep=0 weight=255
+HEADERS stream=7 flags=0x4
   indexed 3                                                    :method: POST
   indexed 7                                                    :scheme: https
   indexed 73                                                   :authority: 127.0.0.1:PORT
@@ -117,7 +117,7 @@ HEADERS stream=7 flags=0x24 exclusive=false dep=0 weight=255
   incremental name=71 value-huffman=true                       sec-fetch-site: cross-site
   incremental name=71 value-huffman=true                       sec-fetch-mode: cors
   indexed 71                                                   accept-language: en-US,en;q=0.9
-  incremental name=70 value-huffman=true                       priority: u=1, i
+  incremental name=70 value-huffman=true                       priority: u=3, i
   indexed 70                                                   accept-encoding: gzip, deflate, br, zstd
   incremental name=31 value-huffman=true                       content-type: application/json
   incremental name=28 value-huffman=false                      content-length: 7
@@ -134,6 +134,7 @@ Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8
 Sec-Fetch-Site: none
 Sec-Fetch-Mode: navigate
 Accept-Language: en-US,en;q=0.9
+Priority: u=0, i
 Accept-Encoding: gzip, deflate, br, zstd
 --- request on connection 1
 GET /b?q=1 HTTP/1.1
@@ -145,6 +146,7 @@ Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8
 Sec-Fetch-Site: none
 Sec-Fetch-Mode: navigate
 Accept-Language: en-US,en;q=0.9
+Priority: u=0, i
 Accept-Encoding: gzip, deflate, br, zstd
 --- request on connection 1
 GET /b?q=2 HTTP/1.1
@@ -156,6 +158,7 @@ Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8
 Sec-Fetch-Site: none
 Sec-Fetch-Mode: navigate
 Accept-Language: en-US,en;q=0.9
+Priority: u=0, i
 Accept-Encoding: gzip, deflate, br, zstd
 --- request on connection 1
 POST /c HTTP/1.1
@@ -167,6 +170,7 @@ Accept: */*
 Sec-Fetch-Site: cross-site
 Sec-Fetch-Mode: cors
 Accept-Language: en-US,en;q=0.9
+Priority: u=3, i
 Accept-Encoding: gzip, deflate, br, zstd
 Content-Type: application/json
 Content-Length: 7
@@ -255,7 +259,7 @@ HEADERS
   literal name="sec-fetch-site" name-huffman=true never=false huffman=true "cross-site"
   literal name="sec-fetch-mode" name-huffman=true never=false huffman=true "cors"
   literal name-ref static=true 72 never=false huffman=true "en-US,en;q=0.9"
-  literal name="priority" name-huffman=true never=false huffman=true "u=1, i"
+  literal name="priority" name-huffman=true never=false huffman=true "u=3, i"
   literal name-ref static=true 31 never=false huffman=true "gzip, deflate, br, zstd"
   indexed static=true 46
   literal name-ref static=true 4 never=false huffman=true "7"
@@ -278,7 +282,7 @@ DATA len=7
       "max_frame_size": 16384,
       "max_header_list_size": 0,
       "connection_window_update": 10420225,
-      "stream_weight": 255,
+      "stream_weight": 0,
       "stream_exclusive": false,
       "no_rfc7540_priorities": true,
       "settings_order": [
@@ -296,14 +300,14 @@ DATA len=7
       "hpack_header_order": [
         "sec-fetch-dest",
         "user-agent",
+        "upgrade-insecure-requests",
         "accept",
+        "referer",
         "sec-fetch-site",
         "sec-fetch-mode",
         "accept-language",
         "priority",
         "accept-encoding",
-        "sec-fetch-user",
-        "referer",
         "cookie",
         "content-type",
         "content-length",
@@ -316,7 +320,46 @@ DATA len=7
       "preface_ping_idle_ms": 0,
       "preface_ping_hang_ms": 0,
       "idle_ping_ms": 0,
-      "priority_over_http1": false
+      "priority_table": {
+        "document": {
+          "urgency": 0,
+          "incremental": true,
+          "emit_header": true
+        },
+        "empty": {
+          "urgency": 3,
+          "incremental": true,
+          "emit_header": true
+        },
+        "font": {
+          "urgency": 3,
+          "incremental": true,
+          "emit_header": true
+        },
+        "iframe": {
+          "urgency": 0,
+          "incremental": true,
+          "emit_header": true
+        },
+        "image": {
+          "urgency": 5,
+          "incremental": true,
+          "emit_header": true
+        },
+        "script": {
+          "urgency": 1,
+          "incremental": true,
+          "emit_header": true
+        },
+        "style": {
+          "urgency": 1,
+          "incremental": true,
+          "emit_header": true
+        }
+      },
+      "priority_model": "table",
+      "priority_over_http1": true,
+      "priority_always_urgency": true
     },
     "http3": {
       "qpack_max_table_capacity": 16383,

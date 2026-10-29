@@ -1,0 +1,119 @@
+{
+  "version": 1,
+  "preset": {
+    "name": "safari-26",
+    "based_on": "safari-18",
+    "headers": {
+      "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.3 Safari/605.1.15",
+      "values": {
+        "Accept-Encoding": "gzip, deflate, br, zstd"
+      },
+      "order": [
+        {
+          "key": "sec-fetch-dest",
+          "value": "document"
+        },
+        {
+          "key": "user-agent",
+          "value": ""
+        },
+        {
+          "key": "accept",
+          "value": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+        },
+        {
+          "key": "sec-fetch-site",
+          "value": "none"
+        },
+        {
+          "key": "sec-fetch-mode",
+          "value": "navigate"
+        },
+        {
+          "key": "accept-language",
+          "value": "en-US,en;q=0.9"
+        },
+        {
+          "key": "priority",
+          "value": "u=0, i"
+        },
+        {
+          "key": "accept-encoding",
+          "value": "gzip, deflate, br, zstd"
+        }
+      ],
+      "image_accept": "image/webp,image/avif,image/jxl,image/heic,image/heic-sequence,video/*;q=0.8,image/png,image/svg+xml,image/*;q=0.8,*/*;q=0.5"
+    },
+    "http2": {
+      "connection_window_update": 10420225,
+      "stream_weight": 0,
+      "settings_order": [
+        2,
+        3,
+        4,
+        9
+      ],
+      "pseudo_order": [
+        ":method",
+        ":scheme",
+        ":authority",
+        ":path"
+      ],
+      "hpack_header_order": [
+        "sec-fetch-dest",
+        "user-agent",
+        "upgrade-insecure-requests",
+        "accept",
+        "referer",
+        "sec-fetch-site",
+        "sec-fetch-mode",
+        "accept-language",
+        "priority",
+        "accept-encoding",
+        "cookie",
+        "content-type",
+        "content-length",
+        "origin"
+      ],
+      "priority_table": {
+        "document": {
+          "urgency": 0,
+          "incremental": true,
+          "emit_header": true
+        },
+        "iframe": {
+          "urgency": 0,
+          "incremental": true,
+          "emit_header": true
+        },
+        "style": {
+          "urgency": 1,
+          "incremental": true,
+          "emit_header": true
+        },
+        "script": {
+          "urgency": 1,
+          "incremental": true,
+          "emit_header": true
+        },
+        "font": {
+          "urgency": 3,
+          "incremental": true,
+          "emit_header": true
+        },
+        "empty": {
+          "urgency": 3,
+          "incremental": true,
+          "emit_header": true
+        },
+        "image": {
+          "urgency": 5,
+          "incremental": true,
+          "emit_header": true
+        }
+      },
+      "priority_over_http1": true,
+      "priority_always_urgency": true
+    }
+  }
+}

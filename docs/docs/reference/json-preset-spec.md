@@ -371,6 +371,7 @@ those requests use the same order as any other of their shape.
 | `idle_ping_ms` | uint32 | Enables a periodic health-check PING, which no browser sends. Omitted or `0` means off, which is what a browser profile wants. |
 | `priority_model` | string | `"chromium"` or `"table"`. On `chromium` a request's own `priority` header picks its weight and each new stream chains onto the newest open stream at the same or a higher priority, as Chrome does. On `table` the weight always comes from the table and every stream's parent is 0, as in Firefox. Omitted derives it from `stream_exclusive`. See [Per-Resource Priority](../fingerprinting/per-resource-priority). |
 | `priority_over_http1` | bool | Whether the priority header also goes out over HTTP/1.1. Firefox sends it there; Chrome, on every platform, does not. Omitted derives it from the model, and `describe` always writes it out. |
+| `priority_always_urgency` | bool | Write `u=` in the priority header even at the default urgency, 3: `u=3, i` rather than `i`. Safari 26 does; Chrome leaves the default out, and so does a preset without this. |
 
 ### `priority_table`
 
