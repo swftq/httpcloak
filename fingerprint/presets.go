@@ -2582,13 +2582,14 @@ func Safari18() *Preset {
 		QUICClientHelloID: tls.HelloIOS_18_QUIC, // Safari uses same QUIC as iOS
 		UserAgent:         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15",
 		Headers: map[string]string{
+			// No Sec-Fetch-User: WebKit sends Sec-Fetch-Dest, -Mode and -Site
+			// only, and never implemented -User (WebKit bug 247697).
 			"Accept":          "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
 			"Accept-Language": "en-US,en;q=0.9",
 			"Accept-Encoding": "gzip, deflate, br",
 			"Sec-Fetch-Dest":  "document",
 			"Sec-Fetch-Mode":  "navigate",
 			"Sec-Fetch-Site":  "none",
-			"Sec-Fetch-User":  "?1",
 		},
 		// Safari header order for HTTP/2 (different from Chrome)
 		HeaderOrder: []HeaderPair{
@@ -2596,7 +2597,6 @@ func Safari18() *Preset {
 			{"sec-fetch-dest", "document"},
 			{"sec-fetch-mode", "navigate"},
 			{"sec-fetch-site", "none"},
-			{"sec-fetch-user", "?1"},
 			{"accept-language", "en-US,en;q=0.9"},
 			{"accept-encoding", "gzip, deflate, br"},
 			{"user-agent", ""}, // Placeholder - actual value set from preset.UserAgent
@@ -2680,8 +2680,8 @@ func IOSChrome147() *Preset {
 //   - User-Agent: iOS 26_4_2, CriOS/148.0.7778.47
 //   - HTTP/2 wire: SettingsOrder [2,3,4,9] (drops MAX_FRAME_SIZE), pseudo-order
 //     m,s,a,p (was m,s,p,a in safariH2Config), ConnectionWindowUpdate 10420225
-//   - HTTP/2 headers: priority added, sec-fetch-user removed, accept-encoding
-//     gains zstd, header order completely reshuffled
+//   - HTTP/2 headers: priority added, accept-encoding gains zstd, header order
+//     completely reshuffled
 //   - HTTP/3 QUIC: 2 MiB stream / 16 MiB connection flow control, 8 max
 //     incoming uni streams (vs Chrome's 103). TLS bytes (HelloIOS_18,
 //     HelloIOS_18_QUIC) match Chrome 146 iOS exactly — no utls update needed
@@ -3295,14 +3295,14 @@ func IOSChrome143() *Preset {
 		QUICClientHelloID: tls.HelloIOS_18_QUIC, // iOS Chrome uses Safari's QUIC for H3
 		UserAgent:         "Mozilla/5.0 (iPhone; CPU iPhone OS 17_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/143.0.6917.0 Mobile/15E148 Safari/604.1",
 		Headers: map[string]string{
-			// WebKit doesn't support Client Hints - no sec-ch-ua headers
+			// WebKit doesn't support Client Hints - no sec-ch-ua headers.
+			// It sends no Sec-Fetch-User either (see Safari18).
 			"Accept":          "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
 			"Sec-Fetch-Site":  "none",
 			"Sec-Fetch-Dest":  "document",
 			"Accept-Encoding": "gzip, deflate, br",
 			"Sec-Fetch-Mode":  "navigate",
 			"Accept-Language": "en-US,en;q=0.9",
-			"Sec-Fetch-User":  "?1",
 		},
 		// Safari/WebKit header order
 		HeaderOrder: []HeaderPair{
@@ -3313,7 +3313,6 @@ func IOSChrome143() *Preset {
 			{"sec-fetch-mode", "navigate"},
 			{"user-agent", ""},
 			{"accept-language", "en-US,en;q=0.9"},
-			{"sec-fetch-user", "?1"},
 		},
 		// Safari/WebKit HTTP/2 settings
 		// Akamai fingerprint: 2:0;4:2097152;3:100;9:1|10485760|0|m,s,p,a
@@ -3346,14 +3345,14 @@ func IOSChrome144() *Preset {
 		QUICClientHelloID: tls.HelloIOS_18_QUIC, // iOS Chrome uses Safari's QUIC for H3
 		UserAgent:         "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/144.0.6917.0 Mobile/15E148 Safari/604.1",
 		Headers: map[string]string{
-			// WebKit doesn't support Client Hints - no sec-ch-ua headers
+			// WebKit doesn't support Client Hints - no sec-ch-ua headers.
+			// It sends no Sec-Fetch-User either (see Safari18).
 			"Accept":          "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
 			"Sec-Fetch-Site":  "none",
 			"Sec-Fetch-Dest":  "document",
 			"Accept-Encoding": "gzip, deflate, br",
 			"Sec-Fetch-Mode":  "navigate",
 			"Accept-Language": "en-US,en;q=0.9",
-			"Sec-Fetch-User":  "?1",
 		},
 		// Safari/WebKit header order (from real iOS Chrome capture)
 		HeaderOrder: []HeaderPair{
@@ -3364,7 +3363,6 @@ func IOSChrome144() *Preset {
 			{"sec-fetch-mode", "navigate"},
 			{"user-agent", ""},
 			{"accept-language", "en-US,en;q=0.9"},
-			{"sec-fetch-user", "?1"},
 		},
 		// Safari/WebKit HTTP/2 settings (from real iOS Chrome capture)
 		// Akamai fingerprint: 2:0;4:2097152;3:100;9:1|10485760|0|m,s,p,a
@@ -3397,14 +3395,14 @@ func IOSChrome145() *Preset {
 		QUICClientHelloID: tls.HelloIOS_18_QUIC, // iOS Chrome uses Safari's QUIC for H3
 		UserAgent:         "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/145.0.6917.0 Mobile/15E148 Safari/604.1",
 		Headers: map[string]string{
-			// WebKit doesn't support Client Hints - no sec-ch-ua headers
+			// WebKit doesn't support Client Hints - no sec-ch-ua headers.
+			// It sends no Sec-Fetch-User either (see Safari18).
 			"Accept":          "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
 			"Sec-Fetch-Site":  "none",
 			"Sec-Fetch-Dest":  "document",
 			"Accept-Encoding": "gzip, deflate, br",
 			"Sec-Fetch-Mode":  "navigate",
 			"Accept-Language": "en-US,en;q=0.9",
-			"Sec-Fetch-User":  "?1",
 		},
 		// Safari/WebKit header order (from real iOS Chrome capture)
 		HeaderOrder: []HeaderPair{
@@ -3415,7 +3413,6 @@ func IOSChrome145() *Preset {
 			{"sec-fetch-mode", "navigate"},
 			{"user-agent", ""},
 			{"accept-language", "en-US,en;q=0.9"},
-			{"sec-fetch-user", "?1"},
 		},
 		// Safari/WebKit HTTP/2 settings (from real iOS Chrome capture)
 		HTTP2Settings: HTTP2Settings{
@@ -3444,14 +3441,13 @@ func IOSSafari17() *Preset {
 		ClientHelloID: tls.HelloIOS_14,
 		UserAgent:     "Mozilla/5.0 (iPhone; CPU iPhone OS 17_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.7 Mobile/15E148 Safari/604.1",
 		Headers: map[string]string{
-			// Safari doesn't send Client Hints
+			// Safari doesn't send Client Hints, or Sec-Fetch-User (see Safari18)
 			"Accept":          "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
 			"Accept-Language": "en-US,en;q=0.9",
 			"Accept-Encoding": "gzip, deflate, br",
 			"Sec-Fetch-Dest":  "document",
 			"Sec-Fetch-Mode":  "navigate",
 			"Sec-Fetch-Site":  "none",
-			"Sec-Fetch-User":  "?1",
 		},
 		// iOS Safari header order for HTTP/2 (same as macOS Safari)
 		HeaderOrder: []HeaderPair{
@@ -3459,7 +3455,6 @@ func IOSSafari17() *Preset {
 			{"sec-fetch-dest", "document"},
 			{"sec-fetch-mode", "navigate"},
 			{"sec-fetch-site", "none"},
-			{"sec-fetch-user", "?1"},
 			{"accept-language", "en-US,en;q=0.9"},
 			{"accept-encoding", "gzip, deflate, br"},
 			{"user-agent", ""}, // Placeholder - actual value set from preset.UserAgent
@@ -3491,14 +3486,13 @@ func IOSSafari18() *Preset {
 		QUICClientHelloID: tls.HelloIOS_18_QUIC, // iOS Safari QUIC for H3
 		UserAgent:         "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1",
 		Headers: map[string]string{
-			// Safari doesn't send Client Hints
+			// Safari doesn't send Client Hints, or Sec-Fetch-User (see Safari18)
 			"Accept":          "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
 			"Accept-Language": "en-US,en;q=0.9",
 			"Accept-Encoding": "gzip, deflate, br",
 			"Sec-Fetch-Dest":  "document",
 			"Sec-Fetch-Mode":  "navigate",
 			"Sec-Fetch-Site":  "none",
-			"Sec-Fetch-User":  "?1",
 		},
 		// iOS Safari header order for HTTP/2 (same as macOS Safari)
 		HeaderOrder: []HeaderPair{
@@ -3506,7 +3500,6 @@ func IOSSafari18() *Preset {
 			{"sec-fetch-dest", "document"},
 			{"sec-fetch-mode", "navigate"},
 			{"sec-fetch-site", "none"},
-			{"sec-fetch-user", "?1"},
 			{"accept-language", "en-US,en;q=0.9"},
 			{"accept-encoding", "gzip, deflate, br"},
 			{"user-agent", ""}, // Placeholder - actual value set from preset.UserAgent
@@ -3658,14 +3651,14 @@ func IOSChrome146() *Preset {
 		QUICClientHelloID: tls.HelloIOS_18_QUIC, // iOS Chrome uses Safari's QUIC for H3
 		UserAgent:         "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/146.0.6917.0 Mobile/15E148 Safari/604.1",
 		Headers: map[string]string{
-			// WebKit doesn't support Client Hints - no sec-ch-ua headers
+			// WebKit doesn't support Client Hints - no sec-ch-ua headers.
+			// It sends no Sec-Fetch-User either (see Safari18).
 			"Accept":          "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
 			"Sec-Fetch-Site":  "none",
 			"Sec-Fetch-Dest":  "document",
 			"Accept-Encoding": "gzip, deflate, br",
 			"Sec-Fetch-Mode":  "navigate",
 			"Accept-Language": "en-US,en;q=0.9",
-			"Sec-Fetch-User":  "?1",
 		},
 		// Safari/WebKit header order (from real iOS Chrome capture)
 		HeaderOrder: []HeaderPair{
@@ -3676,7 +3669,6 @@ func IOSChrome146() *Preset {
 			{"sec-fetch-mode", "navigate"},
 			{"user-agent", ""},
 			{"accept-language", "en-US,en;q=0.9"},
-			{"sec-fetch-user", "?1"},
 		},
 		// Safari/WebKit HTTP/2 settings (from real iOS Chrome capture)
 		HTTP2Settings: HTTP2Settings{
