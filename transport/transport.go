@@ -3259,6 +3259,48 @@ func headerVal(h map[string][]string, name string) string {
 	return ""
 }
 
+// SentFetchDest returns the Sec-Fetch-Dest req goes out with, "" when it
+// carries none: TLS-only with no caller value, or a preset that sends no
+// Sec-Fetch metadata. The session reads it to tell a top-level navigation
+// from everything else.
+func (t *Transport) SentFetchDest(req *Request) string {
+	tlsOnly := t.tlsOnly
+	if req.TLSOnly != nil {
+		tlsOnly = *req.TLSOnly
+	}
+	return sentFetchDest(t.wireHeaders(t.snapshot().preset), tlsOnly, req)
+}
+
+// sentFetchDest decides Sec-Fetch-Dest the way applyPresetHeaders and the
+// caller merge after it do: the pair as given under ExactHeaders, the caller's
+// own value when they set one, "empty" when the request sniffs as a fetch, and
+// the preset's otherwise.
+func sentFetchDest(wire *presetWireHeaders, tlsOnly bool, req *Request) string {
+	if len(req.ExactHeaders) > 0 {
+		for _, hp := range req.ExactHeaders {
+			if strings.EqualFold(hp.Key, "Sec-Fetch-Dest") {
+				return hp.Value
+			}
+		}
+		return ""
+	}
+	if dest := headerVal(req.Headers, "Sec-Fetch-Dest"); dest != "" {
+		return dest
+	}
+	if tlsOnly || !wire.sendsSecFetch {
+		return ""
+	}
+	if sniffXHRMode(cmp.Or(req.Method, "GET"), req.Headers) {
+		return "empty"
+	}
+	for _, p := range wire.pairs {
+		if p.key == "Sec-Fetch-Dest" {
+			return p.value
+		}
+	}
+	return ""
+}
+
 func isAPIAcceptValue(accept string) bool {
 	lower := strings.ToLower(accept)
 	return strings.Contains(lower, "application/json") ||
