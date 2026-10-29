@@ -143,6 +143,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `Origin` follows Fetch. A CORS request carries the page's origin when the URL is on another origin, and with any method but `GET` or `HEAD`. A navigation or no-cors request carries it only with such a method, and sends `null` from an https page to an http URL.
 
   A `Sec-Fetch-Site` or `Origin` you set goes out as you set it, in any spelling. `ExactHeaders`, TLS-only requests and presets that send no `Sec-Fetch-*` get nothing added. With no `Referer` and no `Origin` of yours, a navigation still sends `none` and a no-cors load `cross-site`; a request sniffed as `fetch()` is under Changed. With only `Origin: null`, all three keep the values they had: `none` for a navigation, `cross-site` otherwise. A redirect hop carries the first request's values on, as it carries headers you set. Session warmup's font loads, which are CORS requests, now carry the page's `Origin` when the font is on another origin.
+### Fixed
+
+- **The session resolves a redirect's `Location`, and `Warmup` a page's `src` and `href`, the way a browser does**: Chrome 156 and Firefox 159 were captured following a 302 to a set of targets, and loading the same targets as an `img`, a `script` and a stylesheet. For every case here, the two browsers sent the same request-target whichever way it was given. The session differed in three ways:
+  - A `%3F` in the path was split into a query. `Location: /enc%3Fq=1` was requested as `/enc?q=1`, under a comment claiming browsers read `%3F` as `?`. Both browsers kept it in the path.
+  - An absolute URL was used as given. `https://host/a/b/../abs?x=8` went out as `/a/b/../abs?x=8`, where both browsers sent `/a/abs?x=8`.
+  - The query went out byte for byte. Both browsers percent-encode a space, `"`, `'`, `<`, `>` or a non-ASCII byte in it (the URL standard's special-query set) and leave `%XX` escapes alone. Over HTTP/2 the raw bytes went into `:path`. Over HTTP/1.1 a space split the request line, and the server's 400 came back with no error.
+
+  Both now use RFC 3986 reference resolution through `net/url`, then encode the query the browsers' way, for every preset over HTTP/1.1 and HTTP/2. `OnRedirect`'s `To` and `FinalURL` name the resolved URL. The root package's `Session` and every binding take this path.
+
+  A `Location` that does not parse, such as `/bad%zz`, now fails the request before `OnRedirect` is asked and before anything is sent. The error says `invalid redirect Location` and wraps the `*url.Error`, and no response comes with it. Both browsers failed that fetch without a request. The session used to pass the raw string to `OnRedirect` as `To`, then fail in the transport with `parse_url`. `Warmup` skips such a URL, as both browsers did for an `img`, a `script` and a stylesheet. It sent nothing for one before either.
 
 ## [1.7.3] - 2026-10-14
 

@@ -156,9 +156,10 @@ for _, c := range r.GetHeaders("Set-Cookie") {
 It is read-only. Writing to a field does not retarget the hop — a callback able
 to rewrite the target would run before the origin scrubbing, which is what stops
 `Authorization` following a redirect off-origin. It is not called for a 3xx with
-no `Location` (no hop to veto), nor for the hop that would exceed the cap (that
-fails with `ErrTooManyRedirects`), and never from `DoStream`, which does not
-follow redirects at all.
+no `Location` (no hop to veto), for one whose `Location` does not parse (that
+fails the request), nor for the hop that would exceed the cap (that fails with
+`ErrTooManyRedirects`), and never from `DoStream`, which does not follow
+redirects at all.
 
 #### Bodies on 307 and 308
 

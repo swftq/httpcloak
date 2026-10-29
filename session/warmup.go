@@ -105,7 +105,9 @@ func (s *Session) Warmup(ctx context.Context, url string) error {
 	return nil
 }
 
-// parseSubresources tokenizes HTML and extracts subresource URLs.
+// parseSubresources tokenizes HTML and extracts subresource URLs, resolved
+// against baseURL as a browser resolves them (see resolveURL). A URL that does
+// not parse is skipped: Chrome and Firefox sent no request for one.
 func parseSubresources(body []byte, baseURL string) []subresource {
 	tokenizer := html.NewTokenizer(strings.NewReader(string(body)))
 	seen := make(map[string]bool)
@@ -157,8 +159,8 @@ func parseSubresources(body []byte, baseURL string) []subresource {
 				}
 			}
 			if matched {
-				resolved := resolveURL(baseURL, href)
-				if !seen[resolved] {
+				resolved, err := resolveURL(baseURL, href)
+				if err == nil && !seen[resolved] {
 					seen[resolved] = true
 					resources = append(resources, subresource{url: resolved, typ: typ})
 				}
@@ -167,8 +169,8 @@ func parseSubresources(body []byte, baseURL string) []subresource {
 		case "script":
 			src := getAttr(tokenizer, "src")
 			if src != "" {
-				resolved := resolveURL(baseURL, src)
-				if !seen[resolved] {
+				resolved, err := resolveURL(baseURL, src)
+				if err == nil && !seen[resolved] {
 					seen[resolved] = true
 					resources = append(resources, subresource{url: resolved, typ: resourceJS})
 				}
@@ -177,8 +179,8 @@ func parseSubresources(body []byte, baseURL string) []subresource {
 		case "img":
 			src := getAttr(tokenizer, "src")
 			if src != "" {
-				resolved := resolveURL(baseURL, src)
-				if !seen[resolved] {
+				resolved, err := resolveURL(baseURL, src)
+				if err == nil && !seen[resolved] {
 					seen[resolved] = true
 					resources = append(resources, subresource{url: resolved, typ: resourceImage})
 				}
