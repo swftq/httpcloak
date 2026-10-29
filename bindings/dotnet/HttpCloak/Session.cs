@@ -4093,9 +4093,10 @@ internal class RequestConfig
     public bool DisableHighEntropyClientHints { get; set; }
 
     /// <summary>
-    /// Stops a Referer being added on redirect hops. By default one is synthesised
-    /// per Chrome's strict-origin-when-cross-origin policy. When set, no Referer
-    /// reaches the next hop at all, including one set on the original request.
+    /// Stops the request's Referer being carried onto redirect hops. By default each
+    /// hop carries it as a browser does, per Chrome's strict-origin-when-cross-origin
+    /// policy. When set, no Referer reaches any hop after the first, including one
+    /// set on the original request.
     /// </summary>
     [JsonPropertyName("disable_redirect_referer")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
@@ -4334,9 +4335,10 @@ internal class RequestOptions
     public bool DisableHighEntropyClientHints { get; set; }
 
     /// <summary>
-    /// Stops a Referer being added on redirect hops. By default one is synthesised
-    /// per Chrome's strict-origin-when-cross-origin policy. When set, no Referer
-    /// reaches the next hop at all, including one set on the original request.
+    /// Stops the request's Referer being carried onto redirect hops. By default each
+    /// hop carries it as a browser does, per Chrome's strict-origin-when-cross-origin
+    /// policy. When set, no Referer reaches any hop after the first, including one
+    /// set on the original request.
     /// </summary>
     [JsonPropertyName("disable_redirect_referer")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
@@ -4382,9 +4384,10 @@ internal class StreamOptions
     public bool DisableHighEntropyClientHints { get; set; }
 
     /// <summary>
-    /// Stops a Referer being added on redirect hops. By default one is synthesised
-    /// per Chrome's strict-origin-when-cross-origin policy. When set, no Referer
-    /// reaches the next hop at all, including one set on the original request.
+    /// Stops the request's Referer being carried onto redirect hops. By default each
+    /// hop carries it as a browser does, per Chrome's strict-origin-when-cross-origin
+    /// policy. When set, no Referer reaches any hop after the first, including one
+    /// set on the original request.
     /// </summary>
     [JsonPropertyName("disable_redirect_referer")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
