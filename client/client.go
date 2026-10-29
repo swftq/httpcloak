@@ -53,7 +53,6 @@ import (
 	"io"
 	"math"
 	"math/rand"
-	"net"
 	"net/url"
 	"strings"
 	"sync"
@@ -64,6 +63,7 @@ import (
 	"github.com/sardanioss/httpcloak/fingerprint"
 	"github.com/sardanioss/httpcloak/internal/compress"
 	"github.com/sardanioss/httpcloak/internal/gunzip"
+	"github.com/sardanioss/httpcloak/internal/site"
 	"github.com/sardanioss/httpcloak/pool"
 	"github.com/sardanioss/httpcloak/protocol"
 	"github.com/sardanioss/httpcloak/transport"
@@ -2462,13 +2462,14 @@ func detectSecFetchSiteForMode(fetchSite FetchSite, requestURL *url.URL, referer
 		return "none"
 	}
 
-	// Same origin check: scheme + host + port must match
-	if requestURL.Scheme == refererURL.Scheme &&
-		requestURL.Host == refererURL.Host {
+	// Same origin check: scheme + host + port must match, the way a browser's
+	// URL parser leaves them, so host case and a default port written out
+	// make no difference
+	if site.SameOrigin(requestURL, refererURL) {
 		return "same-origin"
 	}
 
-	// Same site check: compare eTLD+1 (simplified - handles most common cases)
+	// Same site check: the same scheme and registrable domain (eTLD+1)
 	requestSite := extractSite(requestURL.Hostname())
 	refererSite := extractSite(refererURL.Hostname())
 
@@ -2481,28 +2482,13 @@ func detectSecFetchSiteForMode(fetchSite FetchSite, requestURL *url.URL, referer
 }
 
 // extractSite extracts the registrable domain (eTLD+1) from a hostname
-// This is a simplified version - handles most common cases like:
-// - example.com -> example.com
-// - sub.example.com -> example.com
-// - sub.example.co.uk -> example.co.uk (simplified, treats .co.uk as two parts)
+// by the public suffix list, private suffixes included, as Chrome's
+// SchemefulSite does; see site.RegistrableDomain. An IP address, localhost or
+// a public suffix itself is a site of its own. Guessing the suffix from label
+// lengths sent www.cnn.com to edition.cnn.com as cross-site and put
+// a.github.io and b.github.io on one site.
 func extractSite(hostname string) string {
-	// Handle IP addresses
-	if net.ParseIP(hostname) != nil {
-		return hostname
-	}
-
-	parts := strings.Split(hostname, ".")
-	if len(parts) <= 2 {
-		return hostname
-	}
-
-	// Simple heuristic: take last 2 parts, or last 3 if second-to-last is short (like co, com, org in .co.uk)
-	if len(parts) >= 3 && len(parts[len(parts)-2]) <= 3 {
-		// Likely a two-part TLD like .co.uk, .com.au
-		return strings.Join(parts[len(parts)-3:], ".")
-	}
-
-	return strings.Join(parts[len(parts)-2:], ".")
+	return site.RegistrableDomain(hostname)
 }
 
 // applyOrganicJitter is intentionally a no-op.
