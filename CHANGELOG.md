@@ -57,6 +57,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   On a Chromium preset, a request with no `priority` header now goes at 147 on HTTP/2, the weight of urgency 3, however the header came to be missing: the empty value, exact headers, or TLS-only. Chrome sends no other weight without the header. The weight used to come from the request's `Sec-Fetch-Dest`, so an injected script went at 220 with no header, a pair no Chrome build sends. A request with no `Sec-Fetch-Dest` either keeps the preset's static weight, and a table entry with `emit_header: false` keeps its own. Firefox presets keep their table's weights.
 
   On HTTP/3, quic-go still sends a PRIORITY_UPDATE frame for a request with no `priority` header, with the document's `u=0, i`; Chrome sends none at urgency 3.
+- **A frame's navigation sends no `Sec-Fetch-User`**: every navigation carried the preset's `Sec-Fetch-User: ?1`, including one the caller marked as an iframe's with `Sec-Fetch-Dest: iframe`, and a caller could not take it back, since an empty value goes out as an empty header. Chrome sends it only on a navigation a person started, and an iframe loading its `src` is not one: on Cloudflare's challenge iframe it sends `navigate`, `iframe` and `upgrade-insecure-requests` and no `sec-fetch-user`. A navigation with a `Sec-Fetch-Dest` other than `document` now goes without it, on the session transport and on `client.Client`, unless the caller sets it for a click inside the frame. Top-level navigations are unchanged.
 
 ## [1.7.3] - 2026-10-14
 
