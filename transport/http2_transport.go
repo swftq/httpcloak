@@ -19,6 +19,7 @@ import (
 	"github.com/sardanioss/httpcloak/dns"
 	"github.com/sardanioss/httpcloak/fingerprint"
 	"github.com/sardanioss/httpcloak/internal/h2build"
+	"github.com/sardanioss/httpcloak/internal/happyeyeballs"
 	"github.com/sardanioss/httpcloak/proxy"
 	"github.com/sardanioss/net/http2"
 	tls "github.com/sardanioss/utls"
@@ -792,7 +793,7 @@ func (t *HTTP2Transport) establishConn(ctx context.Context, host, port string, s
 		// an unreachable address no longer delays the next, and the fastest
 		// reachable one wins. Bounded by the dialer timeout + ctx; losers closed.
 		tcpStart := time.Now()
-		rawConn, err = staggeredRace(ctx, len(ips), 250*time.Millisecond,
+		rawConn, err = happyeyeballs.Race(ctx, len(ips), 250*time.Millisecond,
 			func(rctx context.Context, idx int) (net.Conn, error) {
 				network := "tcp4"
 				if ips[idx].To4() == nil {

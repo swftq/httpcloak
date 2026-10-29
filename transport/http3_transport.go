@@ -21,6 +21,7 @@ import (
 	"github.com/sardanioss/httpcloak/dns"
 	"github.com/sardanioss/httpcloak/fingerprint"
 	"github.com/sardanioss/httpcloak/internal/h3build"
+	"github.com/sardanioss/httpcloak/internal/happyeyeballs"
 	"github.com/sardanioss/httpcloak/proxy"
 	"github.com/sardanioss/quic-go"
 	"github.com/sardanioss/quic-go/http3"
@@ -1187,9 +1188,9 @@ func (t *HTTP3Transport) raceQUICDialWithECH(ctx context.Context, host string, i
 	// direct path and the connection pools; default stays IPv6-first (RFC 8305).
 	var addrs []*net.UDPAddr
 	if t.preferIPv4Ordering() {
-		addrs = interleaveAddrs(ipv4Addrs, ipv6Addrs)
+		addrs = happyeyeballs.Interleave(ipv4Addrs, ipv6Addrs)
 	} else {
-		addrs = interleaveAddrs(ipv6Addrs, ipv4Addrs)
+		addrs = happyeyeballs.Interleave(ipv6Addrs, ipv4Addrs)
 	}
 
 	if echConfigList == nil {
@@ -1219,25 +1220,6 @@ func (t *HTTP3Transport) raceQUICDialWithECH(ctx context.Context, host string, i
 	return conn, err
 }
 
-// interleaveAddrs alternates two address families (first list first) so the
-// staggered race tries one of each in turn instead of exhausting one family
-// before the other.
-func interleaveAddrs(first, second []*net.UDPAddr) []*net.UDPAddr {
-	out := make([]*net.UDPAddr, 0, len(first)+len(second))
-	i, j := 0, 0
-	for i < len(first) || j < len(second) {
-		if i < len(first) {
-			out = append(out, first[i])
-			i++
-		}
-		if j < len(second) {
-			out = append(out, second[j])
-			j++
-		}
-	}
-	return out
-}
-
 // happyEyeballsDialQUIC races QUIC dials across addrs with a staggered start
 // (RFC 8305 Happy Eyeballs v2): dial the first address, start each subsequent
 // address after a short Connection Attempt Delay — or immediately when a prior
@@ -1246,7 +1228,7 @@ func interleaveAddrs(first, second []*net.UDPAddr) []*net.UDPAddr {
 // added up to 2s of dead time before IPv4 on IPv6-broken networks.
 func (t *HTTP3Transport) happyEyeballsDialQUIC(ctx context.Context, addrs []*net.UDPAddr, tlsCfg *tls.Config, makeConfig func() *quic.Config) (*quic.Conn, error) {
 	const attemptDelay = 250 * time.Millisecond
-	return staggeredRace(ctx, len(addrs), attemptDelay,
+	return happyeyeballs.Race(ctx, len(addrs), attemptDelay,
 		func(rctx context.Context, idx int) (*quic.Conn, error) {
 			// Each attempt gets its own config clone AND its own regenerated
 			// ClientHello spec, so concurrent dials never mutate shared state.
