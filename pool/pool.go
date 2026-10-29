@@ -749,7 +749,8 @@ func (p *HostPool) createConn(ctx context.Context) (*Conn, error) {
 }
 
 // dialHappyEyeballs implements RFC 8305 Happy Eyeballs v2
-// Starts preferred IPs first, waits 250ms, then starts fallback IPs
+// Starts preferred IPs first, then fallback IPs after 250ms or as soon as a
+// preferred dial fails, or at once when there are no preferred IPs
 func (p *HostPool) dialHappyEyeballs(ctx context.Context, preferredIPs, fallbackIPs []net.IP) (net.Conn, error) {
 	// Filter IPs by local address family if set
 	if p.localAddr != "" {
@@ -816,8 +817,10 @@ func (p *HostPool) dialHappyEyeballs(ctx context.Context, preferredIPs, fallback
 		started++
 	}
 
-	// RFC 8305: Wait 250ms before starting fallback IPs
-	if len(fallbackIPs) > 0 {
+	// RFC 8305: Wait 250ms before starting fallback IPs. The wait is a head
+	// start for a preferred dial in flight, so with none started (a host with
+	// no address of the preferred family) the fallback starts at once.
+	if len(fallbackIPs) > 0 && started > 0 {
 		select {
 		case result := <-resultCh:
 			if result.conn != nil {
@@ -831,12 +834,12 @@ func (p *HostPool) dialHappyEyeballs(ctx context.Context, preferredIPs, fallback
 			cancel()
 			return nil, ctx.Err()
 		}
+	}
 
-		// Start fallback IPs in parallel
-		for _, ip := range fallbackIPs {
-			startDial(ip)
-			started++
-		}
+	// Start fallback IPs in parallel
+	for _, ip := range fallbackIPs {
+		startDial(ip)
+		started++
 	}
 
 	// Wait for first success or all failures

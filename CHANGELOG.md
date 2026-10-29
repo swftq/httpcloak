@@ -211,6 +211,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - **Chrome on iOS from 148 on sends WebKit 26's priorities**: these presets sent weight 255 in every HTTP/2 HEADERS frame, `priority: u=0, i` on every request whatever it was for, and no priority header over HTTP/1.1. Chrome on iOS runs on WebKit, and its HTTP/2 layer already matched Safari 26's capture, down to the same Akamai hash. They now behave as Safari 26 did: no priority fields on HEADERS, a priority header that follows the request (`u=1, i` for a script, `u=5, i` for an image, `u=3, i` for a `fetch()`) on every protocol including HTTP/1.1, and `referer` right after `accept`. This was measured in Safari, not in Chrome on iOS itself; the presets before 148 stay as they were.
+### Fixed
+
+- **A new HTTP/2 connection from a `Client` to a host with no IPv6 address no longer waits 250ms**: the `client` package's HTTP/2 pool gives the preferred address family, IPv6 unless `WithPreferIPv4()` is set, a 250ms head start over the other. When the host had no address of the preferred family it dialed nothing and still waited out the 250ms, so every new connection to an IPv4-only host, IP literals such as `127.0.0.1` included, was 250ms late: measured locally, the first request of a new `Client` over HTTP/2 took 253ms, and 2ms with `WithPreferIPv4()`. The other family is now dialed at once, as Chrome does: it holds IPv4 back only while an IPv6 attempt is pending. A host with addresses in both families still gives IPv6 its head start, cut short as before when an IPv6 dial fails. HTTP/1.1, HTTP/3 and `Session` connections were never affected; their dialers start the first address at once.
 
 ## [1.7.3] - 2026-10-14
 
