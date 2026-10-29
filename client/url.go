@@ -147,12 +147,76 @@ func DecodeParams(query string) (map[string]string, error) {
 	return params, nil
 }
 
-// JoinURL joins a base URL with a path
+// JoinURL resolves path against base by RFC 3986 reference resolution, as a
+// browser resolves a redirect's Location. A relative reference keeps its query
+// and fragment, dot segments are removed, "?q" replaces only base's query, and
+// "//host/x" takes base's scheme. The query is then percent-encoded as a
+// browser encodes it; see encodeSpecialQuery. URL-standard quirks beyond that,
+// such as reading a backslash as a slash, are not applied.
+//
+// An empty path returns base unchanged. If net/url cannot parse base or path
+// (an invalid %-escape, a control character, a bad host or port), the result
+// is the plain string join JoinURL did before it resolved references.
 func JoinURL(base, path string) string {
 	if path == "" {
 		return base
 	}
+	if b, err := url.Parse(base); err == nil {
+		if u, err := resolveReference(b, path); err == nil {
+			return u.String()
+		}
+	}
+	return joinURLFallback(base, path)
+}
 
+// resolveReference is JoinURL's resolution, which the redirect loop calls
+// directly: a Location that does not parse must fail the hop, as it fails in
+// Chrome and Firefox, where JoinURL would fall back.
+func resolveReference(base *url.URL, ref string) (*url.URL, error) {
+	u, err := base.Parse(ref)
+	if err != nil {
+		return nil, err
+	}
+	u.RawQuery = encodeSpecialQuery(u.RawQuery)
+	return u, nil
+}
+
+// encodeSpecialQuery percent-encodes the bytes of an http(s) URL's query that
+// fall in the URL standard's special-query percent-encode set: C0 controls,
+// space, ", #, <, >, ' and every byte above ~. Chrome 156 and Firefox 159 both
+// encoded a Location's query this way, and left %XX escapes alone, valid or
+// not. net/url keeps a query byte for byte, so a raw space from a server would
+// otherwise split the HTTP/1.1 request line.
+func encodeSpecialQuery(q string) string {
+	n := 0
+	for i := 0; i < len(q); i++ {
+		if inSpecialQuerySet(q[i]) {
+			n++
+		}
+	}
+	if n == 0 {
+		return q
+	}
+	const hex = "0123456789ABCDEF"
+	b := make([]byte, 0, len(q)+2*n)
+	for i := 0; i < len(q); i++ {
+		c := q[i]
+		if inSpecialQuerySet(c) {
+			b = append(b, '%', hex[c>>4], hex[c&15])
+		} else {
+			b = append(b, c)
+		}
+	}
+	return string(b)
+}
+
+func inSpecialQuerySet(c byte) bool {
+	return c <= ' ' || c > '~' || c == '"' || c == '#' || c == '<' || c == '>' || c == '\''
+}
+
+// joinURLFallback is JoinURL as it was before it resolved references, kept for
+// input net/url rejects so that callers see the same string for it as before.
+func joinURLFallback(base, path string) string {
 	// Handle absolute URLs
 	if strings.HasPrefix(path, "http://") || strings.HasPrefix(path, "https://") {
 		return path

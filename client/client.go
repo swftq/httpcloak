@@ -1270,8 +1270,13 @@ func (c *Client) doOnce(ctx context.Context, req *Request, redirectHistory []*Re
 				return nil, fmt.Errorf("redirect response missing Location header")
 			}
 
-			// Resolve relative URL
-			redirectURL := JoinURL(reqURL, location)
+			// Resolve the Location against this request's URL as JoinURL does,
+			// but fail on one that does not parse rather than fall back.
+			target, err := resolveReference(parsedURL, location)
+			if err != nil {
+				return nil, fmt.Errorf("invalid redirect Location %q: %w", location, err)
+			}
+			redirectURL := target.String()
 
 			// Determine new method based on redirect code
 			newMethod := method
