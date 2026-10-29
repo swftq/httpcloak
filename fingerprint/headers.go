@@ -584,14 +584,43 @@ func NewHeaderCoherence(preset *Preset) *HeaderCoherence {
 	}
 }
 
+// omitsSecFetchUser reports whether the preset's browser sends Fetch Metadata
+// but no Sec-Fetch-User, as WebKit does: it implements Sec-Fetch-Dest, -Mode
+// and -Site and never implemented -User (WebKit bug 247697), so neither Safari
+// nor Chrome on iOS sends it. The answer comes from the preset's emit set, its
+// HeaderOrder or, without one, its Headers map, which is what the session
+// transport sends. client.Client applies the same rule to its navigations.
+func omitsSecFetchUser(p *Preset) bool {
+	if p == nil {
+		return false
+	}
+	var secFetch, user bool
+	note := func(name string) {
+		if len(name) >= 10 && strings.EqualFold(name[:10], "sec-fetch-") {
+			secFetch = true
+			user = user || strings.EqualFold(name, "sec-fetch-user")
+		}
+	}
+	if len(p.HeaderOrder) > 0 {
+		for _, hp := range p.HeaderOrder {
+			note(hp.Key)
+		}
+	} else {
+		for name := range p.Headers {
+			note(name)
+		}
+	}
+	return secFetch && !user
+}
+
 // ApplyToHeaders applies coherent headers to the given header map
 func (h *HeaderCoherence) ApplyToHeaders(headers map[string]string, ctx RequestContext) {
-	// Apply Sec-Fetch-* headers
+	// Apply Sec-Fetch-* headers. Sec-Fetch-User only for a preset that sends it.
 	secFetch := GenerateSecFetchHeaders(ctx)
 	headers["Sec-Fetch-Site"] = secFetch.Site
 	headers["Sec-Fetch-Mode"] = secFetch.Mode
 	headers["Sec-Fetch-Dest"] = secFetch.Dest
-	if secFetch.User != "" {
+	if secFetch.User != "" && !omitsSecFetchUser(h.preset) {
 		headers["Sec-Fetch-User"] = secFetch.User
 	} else {
 		delete(headers, "Sec-Fetch-User")
