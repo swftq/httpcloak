@@ -170,6 +170,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`client.Client` carries the request's own `Referer` onto a redirect hop**: the `client` package follows redirects in its own loop, and each hop repeated the first request's `Referer`, unchanged on every origin. A request sent with no `Referer` sent the first URL of the chain on every hop instead, a typed navigation among them. The hop set its own `Referer` to the URL that redirected. But it was built from the request's headers, which by then held a copy of every header the request had sent, so that copy won wherever there was one. Chrome 156 and Firefox 159 were captured on redirected `fetch()`, XHR, iframe and form POST requests, and WebKit's source was read. All three start each hop from the `Referer` the hop before it sent, and send none when it had none.
 
   Each hop now applies the default `strict-origin-when-cross-origin` policy again for its new URL, the rule the session's redirect path follows. The `Referer` goes unchanged while the hop stays on its origin and is cut to that origin when the hop leaves. Once cut it stays cut, even where the chain comes back to the page's origin. With `WithTLSOnly`, a `Referer` header follows the same rule; it used to go out verbatim on every hop. The root package's `Client`, which wraps `client.Client`, gets the same fix. `Response.Request.Referer` now names what the last hop sent, not the URL that redirected to it.
+### Fixed
+
+- **A `client.Client` redirect hop sends the `Sec-Fetch-Site` a browser would**: every hop repeated the first request's value. So a `fetch()` sent as `same-origin` and redirected to another site still said `same-origin` there, and again on the hop back. Chrome 156 and Firefox 159 were captured on 100 requests moving between a page's origin, another host on its site, another port and another site. They sent the same value on every hop: the most cross-site relation between the page and any URL in the chain so far. So the value only moves towards `cross-site`, a chain that comes back keeps what it reached, and a typed navigation's `none` stays `none`. Each hop now works it out the same way, by the rule the session follows:
+  - `same-origin` becomes `same-site` on another host or port of its site, and `cross-site` on another site.
+  - `same-site` becomes `cross-site` off its site.
+  - `none` and `cross-site` never change.
+
+  A site is the scheme plus the registrable domain from the public suffix list. A `Sec-Fetch-Site` you set in the request's headers follows the same rule, with `WithTLSOnly` too.
 
 ## [1.7.3] - 2026-10-14
 

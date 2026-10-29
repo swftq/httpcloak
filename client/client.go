@@ -67,6 +67,7 @@ import (
 	"github.com/sardanioss/httpcloak/pool"
 	"github.com/sardanioss/httpcloak/protocol"
 	"github.com/sardanioss/httpcloak/transport"
+	"golang.org/x/net/publicsuffix"
 )
 
 // Note: As of Go 1.20, the global random generator is automatically seeded.
@@ -1411,6 +1412,22 @@ func (c *Client) doOnce(ctx context.Context, req *Request, redirectHistory []*Re
 					carriedAuth = nil
 				}
 
+				// The next hop's Sec-Fetch-Site follows from the value this
+				// request sent; see redirectFetchSiteClient. A typed
+				// navigation's none stays none on every hop, and any other
+				// value only moves towards cross-site. It also replaces the
+				// carried copy, under whatever spelling that has: req.Headers
+				// holds the value this request sent, copied in for debugging,
+				// and the hop applies carried headers after the field, so the
+				// copy would win. TLSOnly reads only the headers, so there a
+				// Sec-Fetch-Site the caller set follows the same rule.
+				hopSite := redirectFetchSiteClient(httpReq.Header.Get("Sec-Fetch-Site"), reqURL, redirectURL)
+				for k, v := range carriedHeaders {
+					if len(v) > 0 && strings.EqualFold(k, "Sec-Fetch-Site") {
+						carriedHeaders[k] = []string{hopSite}
+					}
+				}
+
 				// Create new request for redirect
 				newReq := &Request{
 					Method:          newMethod,
@@ -1420,7 +1437,7 @@ func (c *Client) doOnce(ctx context.Context, req *Request, redirectHistory []*Re
 					UserAgent:       req.UserAgent,
 					ForceProtocol:   req.ForceProtocol,
 					FetchMode:       req.FetchMode,
-					FetchSite:       FetchSiteCrossSite, // Redirects are usually cross-site
+					FetchSite:       fetchSiteFromHeader(hopSite),
 					Referer:         carriedReferer,
 					Auth:            carriedAuth,
 					FollowRedirects: req.FollowRedirects,
@@ -2532,6 +2549,97 @@ func requestReferer(req *Request) string {
 // a.github.io and b.github.io on one site.
 func extractSite(hostname string) string {
 	return site.RegistrableDomain(hostname)
+}
+
+// fetchSiteFromHeader returns the FetchSite that sends value as
+// Sec-Fetch-Site, or FetchSiteAuto for a value no FetchSite sends.
+func fetchSiteFromHeader(value string) FetchSite {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "none":
+		return FetchSiteNone
+	case "same-origin":
+		return FetchSiteSameOrigin
+	case "same-site":
+		return FetchSiteSameSite
+	case "cross-site":
+		return FetchSiteCrossSite
+	}
+	return FetchSiteAuto
+}
+
+// redirectFetchSiteClient returns the Sec-Fetch-Site to send on a redirect hop
+// from fromURL to toURL, given the value the request to fromURL sent.
+//
+// A browser sends the most cross-site relation between the request's
+// initiator and any URL in its redirect chain, the new one included. Chrome's
+// GetRelationOfURLChainToOrigin, Firefox's SecFetch::AddSecFetchSite and
+// WebKit's computeFetchMetadataSiteAfterRedirection all do this. The client
+// never learns the initiator, but the value the last hop sent pins down as
+// much of it as the next hop needs:
+//   - same-origin: every URL so far was on the initiator's origin, so the
+//     initiator is fromURL's origin. The hop stays same-origin on that
+//     origin, becomes same-site on its site, and cross-site anywhere else.
+//   - same-site: every URL so far was on the initiator's site, which is
+//     fromURL's site. The hop stays same-site there, even back on the
+//     initiator's own origin, and becomes cross-site anywhere else.
+//   - none, sent for a navigation the user started, stays none on every hop,
+//     and cross-site stays cross-site. So does a value no browser sends.
+//
+// That is how WebKit works it out, hop by hop. Chrome 156 and Firefox 159 sent
+// the same values on every hop when captured across a.test, sub.a.test and
+// b.test.
+//
+// It is the rule of session.redirectFetchSite, copied here because this
+// package does not import session. Keep the two in step.
+func redirectFetchSiteClient(site, fromURL, toURL string) string {
+	switch strings.ToLower(strings.TrimSpace(site)) {
+	case "same-origin":
+		if sameOriginClient(fromURL, toURL) {
+			return site
+		}
+		if sameSiteClient(fromURL, toURL) {
+			return "same-site"
+		}
+		return "cross-site"
+	case "same-site":
+		if sameSiteClient(fromURL, toURL) {
+			return site
+		}
+		return "cross-site"
+	}
+	return site
+}
+
+// sameSiteClient reports whether two URLs are on the same site, as Chrome's
+// SchemefulSite and the HTML spec define it: the same scheme and the same
+// registrable domain, which is the eTLD+1 by the public suffix list with
+// private suffixes such as github.io included. A host with no registrable
+// domain, such as an IP address, localhost or a public suffix itself, is a
+// site of its own. The port never matters. A copy of session.sameSite.
+//
+// extractSite above guesses the registrable domain instead, and takes any
+// second-level label of three letters or fewer for part of the suffix, so it
+// puts sub.a.test on a site of its own.
+func sameSiteClient(a, b string) bool {
+	as, ah, _ := parseOriginClient(a)
+	bs, bh, _ := parseOriginClient(b)
+	if as == "" || as != bs || ah == "" || bh == "" {
+		return false
+	}
+	return registrableDomainClient(ah) == registrableDomainClient(bh)
+}
+
+// registrableDomainClient returns host's eTLD+1, or host itself when it has
+// none. host must be lowercase, as parseOriginClient returns it. A copy of
+// session.registrableDomain.
+func registrableDomainClient(host string) string {
+	if net.ParseIP(host) != nil {
+		return host
+	}
+	if d, err := publicsuffix.EffectiveTLDPlusOne(host); err == nil {
+		return d
+	}
+	return host
 }
 
 // applyOrganicJitter is intentionally a no-op.
