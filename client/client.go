@@ -67,7 +67,6 @@ import (
 	"github.com/sardanioss/httpcloak/pool"
 	"github.com/sardanioss/httpcloak/protocol"
 	"github.com/sardanioss/httpcloak/transport"
-	"golang.org/x/net/publicsuffix"
 )
 
 // Note: As of Go 1.20, the global random generator is automatically seeded.
@@ -567,6 +566,12 @@ type Request struct {
 	// enabled: a request the caller already vetoed should not be replayed, and
 	// replaying it would re-invoke the callback once per attempt.
 	OnRedirect func(*Redirect) error
+
+	// originChain is the Origin state of the redirect chain this request is a
+	// hop of, and nil on the request a chain starts with. Only the redirect
+	// loop sets it. A hop carries the Origin its chain worked out in its
+	// headers, so the header pipeline adds none of its own.
+	originChain *redirectOriginClient
 }
 
 // SetHeader sets a header value, replacing any existing values.
@@ -1334,6 +1339,18 @@ func (c *Client) doOnce(ctx context.Context, req *Request, redirectHistory []*Re
 					Headers:    headers,
 				})
 
+				// The hop's Origin is worked out afresh, from the request's
+				// origin and mode as the chain's first request went out with
+				// them, this hop's method, and the URLs the chain has been
+				// through; see redirectOriginClient. Each hop request keeps its
+				// own copy of that state.
+				chain := req.originChain
+				if chain == nil {
+					chain = chainOriginClient(httpReq, reqURL, c.preset)
+				}
+				hopChain := *chain
+				hopOrigin, sendOrigin := hopChain.next(reqURL, redirectURL, newMethod)
+
 				var carriedHeaders map[string][]string
 				if len(req.Headers) > 0 {
 					carriedHeaders = make(map[string][]string, len(req.Headers))
@@ -1366,6 +1383,10 @@ func (c *Client) doOnce(ctx context.Context, req *Request, redirectHistory []*Re
 								continue
 							}
 						}
+						// Origin is worked out above, unless the chain leaves it alone.
+						if lk == "origin" && hopChain.mode != "" {
+							continue
+						}
 						carriedHeaders[k] = v
 					}
 				}
@@ -1380,6 +1401,17 @@ func (c *Client) doOnce(ctx context.Context, req *Request, redirectHistory []*Re
 						carriedHeaders = make(map[string][]string, 1)
 					}
 					carriedHeaders[ownCookieKey] = ownCookie
+				}
+
+				// The hop's Origin rides in the carried headers, which it
+				// applies last. req.Headers holds a copy of every header this
+				// request sent, the Origin among them, and TLSOnly reads only
+				// the headers.
+				if hopChain.mode != "" && sendOrigin {
+					if carriedHeaders == nil {
+						carriedHeaders = make(map[string][]string, 1)
+					}
+					carriedHeaders["Origin"] = []string{hopOrigin}
 				}
 
 				// The next hop's Referer is the one this request sent, with the
@@ -1450,6 +1482,8 @@ func (c *Client) doOnce(ctx context.Context, req *Request, redirectHistory []*Re
 					// Without this the callback fires on hop one and vanishes,
 					// which is the failure HeaderOrder was fixed for.
 					OnRedirect: req.OnRedirect,
+					// The chain's Origin state as of this hop.
+					originChain: &hopChain,
 				}
 
 				// A hop that keeps the method keeps the body, as in Fetch's
@@ -2104,7 +2138,7 @@ func applyModeHeaders(httpReq *http.Request, preset *fingerprint.Preset, req *Re
 	// Apply mode-specific headers - EVERYTHING is coherent
 	switch effectiveMode {
 	case FetchModeCORS:
-		applyCORSModeHeaders(httpReq, preset, req, parsedURL)
+		applyCORSModeHeaders(httpReq, preset, req)
 	case FetchModeNoCors:
 		applyNoCorsHeaders(httpReq, preset, req)
 	default:
@@ -2126,6 +2160,20 @@ func applyModeHeaders(httpReq *http.Request, preset *fingerprint.Preset, req *Re
 		}
 	}
 	dropEmptyPriority(httpReq.Header)
+
+	// Origin comes last, from what the request goes out with once the
+	// caller's headers are in: its Sec-Fetch-Mode, Referer and method. Each
+	// mode used to make up its own: cors sent one even to the page's own
+	// origin, and a form or no-cors POST none, where browsers do the reverse.
+	// A caller's Origin wins like any other header, and a redirect hop
+	// carries the one its chain worked out.
+	if req.originChain == nil {
+		if _, ok := getHeaderCaseInsensitive(req.Headers, "Origin"); !ok {
+			if origin, ok := requestOriginClient(httpReq, preset, effectiveMode, parsedURL.String()); ok {
+				httpReq.Header.Set("Origin", origin)
+			}
+		}
+	}
 
 	// Set header order for HTTP/2 and HTTP/3 fingerprinting
 	// Use H2HeaderOrder (full HPACK position table) — see the matching
@@ -2323,7 +2371,7 @@ func omitsSecFetchUser(preset *fingerprint.Preset) bool {
 }
 
 // applyCORSModeHeaders sets headers for XHR/fetch() calls (JavaScript API request)
-func applyCORSModeHeaders(httpReq *http.Request, preset *fingerprint.Preset, req *Request, parsedURL *url.URL) {
+func applyCORSModeHeaders(httpReq *http.Request, preset *fingerprint.Preset, req *Request) {
 	// Client hints (low-entropy only)
 	if v, ok := preset.Headers["sec-ch-ua"]; ok {
 		httpReq.Header.Set("Sec-Ch-Ua", v)
@@ -2358,15 +2406,7 @@ func applyCORSModeHeaders(httpReq *http.Request, preset *fingerprint.Preset, req
 	// NO Sec-Fetch-User for CORS
 	// NO Upgrade-Insecure-Requests for CORS
 	// NO Cache-Control for CORS
-
-	// Origin header - required for CORS
-	if referer := requestReferer(req); referer != "" {
-		if refURL, err := url.Parse(referer); err == nil {
-			httpReq.Header.Set("Origin", refURL.Scheme+"://"+refURL.Host)
-		}
-	} else {
-		httpReq.Header.Set("Origin", parsedURL.Scheme+"://"+parsedURL.Host)
-	}
+	// Origin is worked out once every header is in; see requestOriginClient.
 
 	// Priority header for CORS mode (Chrome 143+)
 	// CORS uses "u=1, i" (urgency 1, incremental) vs navigation's "u=0, i"
@@ -2418,7 +2458,7 @@ func applyNoCorsHeaders(httpReq *http.Request, preset *fingerprint.Preset, req *
 	} else {
 		httpReq.Header.Set("Sec-Fetch-Dest", "empty")
 	}
-	// NO Origin header (no-cors doesn't send Origin)
+	// Origin only on a method other than GET or HEAD; see requestOriginClient.
 	// NO Sec-Fetch-User (only for navigation)
 	// NO Upgrade-Insecure-Requests (only for navigation)
 	// The priority header comes from the preset's table, in applyTablePriority.
@@ -2629,17 +2669,10 @@ func sameSiteClient(a, b string) bool {
 	return registrableDomainClient(ah) == registrableDomainClient(bh)
 }
 
-// registrableDomainClient returns host's eTLD+1, or host itself when it has
-// none. host must be lowercase, as parseOriginClient returns it. A copy of
-// session.registrableDomain.
+// registrableDomainClient returns host's registrable domain, the part that
+// names its site; see site.RegistrableDomain.
 func registrableDomainClient(host string) string {
-	if net.ParseIP(host) != nil {
-		return host
-	}
-	if d, err := publicsuffix.EffectiveTLDPlusOne(host); err == nil {
-		return d
-	}
-	return host
+	return site.RegistrableDomain(host)
 }
 
 // applyOrganicJitter is intentionally a no-op.

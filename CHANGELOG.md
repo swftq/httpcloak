@@ -178,6 +178,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `none` and `cross-site` never change.
 
   A site is the scheme plus the registrable domain from the public suffix list. A `Sec-Fetch-Site` you set in the request's headers follows the same rule, with `WithTLSOnly` too.
+### Fixed
+
+- **`client.Client` sends the `Origin` a browser sends, on the first request and on each redirect hop**: a CORS request carried `Origin` whatever its target, the `Referer`'s origin or else the target's own. So a `fetch()`-style GET or HEAD to the page's own origin sent one, where Chrome 156, Firefox 159 and Fetch send none. A form or no-cors POST carried none, where both browsers send the page's origin on every request whose method is not GET or HEAD. The client follows redirects in its own loop, and each hop repeated the first request's `Origin`, or its lack of one. A hop never gained the page's origin, never dropped it on the GET after a 303, and never turned `null` after leaving another origin.
+
+  Chrome 156 and Firefox 159 were captured on redirected `fetch()`, XHR, no-cors `fetch()`, iframe and form requests, with 302, 303, 307 and 308, within one origin and out to a second origin and back. Neither copies `Origin`. Each works it out again for every request, as Fetch does, and the client now follows the same rule as the session's redirect path:
+
+  - A CORS request sends no `Origin` on a GET or HEAD to the page's own origin, and the page's origin otherwise. Redirected to another origin, it gains the page's origin.
+  - A form, no-cors or navigation request sends the page's origin on a method other than GET or HEAD, and none on a GET or HEAD. So its GET hops carry none, and so does the GET after a 303.
+  - A hop that leaves another origin for a third one or comes back sends `Origin: null` (Fetch's tainted origin), and so does every hop after it.
+  - A form or no-cors POST redirected to another origin with 307 or 308 went out with `null` from Chrome, whose network stack does that on every cross-origin redirect, and with the page's origin from Firefox, as Fetch says. Chrome and Android Chrome presets follow Chrome there; the Firefox, Safari and iOS Chrome presets follow Fetch. Safari could not be captured, but WebKit's loader makes the origin opaque on the same hops.
+
+  The `Sec-Fetch-Mode` the request goes out with, the caller's or the client's own, decides which rule applies. The page's origin is the origin of the `Referer` the request sends, written the way a browser writes an `Origin`: lowercase, without the scheme's default port. With no `Referer` the client knows no page, so a CORS request keeps sending the target's own origin, and a form or no-cors POST still sends none; the hops take the target's origin for the page's. A caller's `Origin` goes out as set on the first request and is the page's origin for the hops. A chain whose first request went out with no `Sec-Fetch-Mode`, such as a `WithTLSOnly` request without one, carries the caller's `Origin` unchanged on every hop. The root package's `Client`, which wraps `client.Client`, gets the same fix.
 
 ## [1.7.3] - 2026-10-14
 
