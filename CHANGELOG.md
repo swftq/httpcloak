@@ -106,6 +106,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Session warmup sends each subresource the `Referer` a browser sends**: every stylesheet, script, image and font went out with the full page URL as its `Referer`, fragment included, whatever origin it was on. A page that sets no referrer policy gets the default, `strict-origin-when-cross-origin`, and Chrome 156 and Firefox 159 captures of all four kinds follow it. From `https://a.test/page?q=1#frag`, the page's own origin gets `https://a.test/page?q=1`. Any other origin gets only `https://a.test/`, same-site (`sub.a.test`) or not (`b.test`). An http page follows the same rule. WebKit's source gives the same under its default, so the Safari and iOS presets take the rule too. This is the warmup in `Session` and in every binding, over HTTP/1.1, HTTP/2 and HTTP/3.
 
   An https page's `http://` subresource now goes out with no `Referer`, as a redirect from https to http already does. Warmup still fetches it, where Chrome and Firefox do not: they block an http stylesheet, script or font on an https page, and upgrade an http image to https.
+### Fixed
+
+- **A redirect hop sends the `Sec-Fetch-Site` a browser would**: the session copied the `Sec-Fetch-Site` you set onto every hop. So a `fetch()` sent as `same-origin` and redirected to another site still said `same-origin` there, and again on the hop back. Chrome 156 and Firefox 159 were captured on 100 requests moving between `a.test`, `sub.a.test`, `b.test`, a second port on `a.test` and plain-HTTP `a.test`, and they sent the same value on every hop. Each hop sends the most cross-site relation between the page that started the request and any URL in the chain so far, so the value only moves towards `cross-site`:
+  - `same-origin` becomes `same-site` on another host or port of the same site, and `cross-site` on another site or scheme.
+  - `same-site` becomes `cross-site` off its site.
+  - A chain that comes back keeps what it reached.
+  - A typed navigation's `none` stays `none` on every hop, even through another site.
+
+  WebKit's source works it out the same way. A site is the scheme plus the registrable domain from the public suffix list, so one host over http and https is two sites, and two ports on one host are one.
+
+  Only a value you set can move. A preset's own value is `none` for a navigation and `cross-site` for a request sniffed as `fetch()`, and a hop changes neither. With `ExactHeaders`, a `Sec-Fetch-Site` pair takes the hop's value in its own slot and spelling, because the transport never reads the hop's headers in that mode. A list without the pair gains none.
 
 ## [1.7.3] - 2026-10-14
 
