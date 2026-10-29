@@ -73,6 +73,7 @@
         "accept-language",
         "priority",
         "accept-encoding",
+        "connection",
         "cookie",
         "content-type",
         "content-length",
