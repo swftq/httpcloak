@@ -130,8 +130,10 @@ func checkWebKit26H1Tail(t *testing.T, label string, lines []string, s webKit26T
 // the body's headers on all 270 requests that had a body, all of them fetch()
 // and sendBeacon() calls, and Cache-Control, the field the table does not name
 // that turned up most, right before Accept-Language on 259. The WebKit 26
-// presets wrote Connection right after Host, which is Chrome's place, and the
-// body's headers and the caller's own after Cookie.
+// presets wrote the body's headers and the caller's own after Cookie, and
+// Connection before it: safari-26 and safari-26-ios right after
+// Accept-Encoding, Chrome on iOS from 148 on right after Host, which is
+// Chrome's place.
 //
 // Headers set by a page went first too. In the capture of 2026-10-28, a fetch()
 // with four and an XMLHttpRequest with two sent every one of them ahead of
