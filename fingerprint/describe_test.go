@@ -551,7 +551,8 @@ func TestDescribe_CustomRegistryRoundTrip(t *testing.T) {
 // came back from a describe and reload on its bare policy. No built-in preset
 // had a map, so TestDescribeRoundTripsEveryPreset could not see it; a custom
 // preset such as the curl mirror, whose one override is {"authorization":
-// "never"}, lost exactly the entry that makes it curl.
+// "never"}, lost exactly the entry that makes it curl. safari-26 is the
+// built-in case: its four overrides are what make its HPACK Safari's.
 func TestDescribe_HPACKRepresentationRoundTrips(t *testing.T) {
 	const custom = "describe-rep-never"
 	p, err := LoadAndBuildPresetFromJSON([]byte(`{"version":1,"preset":{"name":"` + custom +
@@ -567,6 +568,8 @@ func TestDescribe_HPACKRepresentationRoundTrips(t *testing.T) {
 		want map[string]string
 	}{
 		{custom, map[string]string{"authorization": "never"}},
+		{"safari-26", map[string]string{":method": "incremental", ":protocol": "incremental",
+			"content-length": "without", "cookie": "never"}},
 	} {
 		out, err := Describe(c.name)
 		if err != nil {

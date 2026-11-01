@@ -207,6 +207,7 @@ Safari macOS:
 - `NO_RFC7540_PRIORITIES=1`. Safari opts out of stream priorities. Safari 26 also puts no priority fields on HEADERS, and sends an RFC 9218 `priority` header on every request, HTTP/1.1 included.
 - No `sec-ch-ua` (Safari doesn't ship Client Hints). Header order is shorter than Chrome's. Safari 26 sends no `Sec-Fetch-User`.
 - Default Akamai on 18: `2:0;4:2097152;3:100;5:16384;9:1|10485760|0|m,s,p,a`. On 26: `2:0;3:100;4:2097152;9:1|10420225|0|m,s,a,p`, the same as `chrome-155-ios`, since Chrome on iOS runs on WebKit.
+- HPACK on 26: one `cookie` field per cookie, each a literal never indexed, so the whole jar goes out on every request, and `:path` and `content-length` as literals without indexing, apart from `:path: /`, which is static entry 4. `chrome-148-ios` and later encode the same way. Safari 26.3 never-indexed all 1059 cookie fields of its capture, but each was 11 to 14 bytes: longer crumbs were not captured, and Firefox 159 and nghttp2 never-index only crumbs under 20 bytes. The 18 presets still send one indexed `cookie` field and index `:path` and `content-length`; no capture shows Safari 18's HPACK.
 
 ---
 

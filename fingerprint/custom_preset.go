@@ -154,8 +154,9 @@ type HTTP2Spec struct {
 	HPACKHeaderOrderSubresource []string `json:"hpack_header_order_subresource,omitempty"`
 	HPACKIndexingPolicy         *string  `json:"hpack_indexing_policy,omitempty"` // "chrome","never","always","default"
 	// HPACKRepresentation pins the HPACK representation per header name:
-	// "incremental", "without", "never" or "default". Override layer, empty
-	// for browser profiles, deltas only. See H2FingerprintConfig.
+	// "incremental", "without", "never" or "default". Override layer, deltas
+	// from the policy only; the WebKit 26 presets carry four. Replaces an
+	// inherited map. See H2FingerprintConfig.
 	HPACKRepresentation map[string]string `json:"hpack_representation,omitempty"`
 
 	HPACKNeverIndex    []string `json:"hpack_never_index,omitempty"`
