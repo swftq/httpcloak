@@ -1337,8 +1337,8 @@ func connectionValue(req *http.Request) string {
 // the slot right after Host, decides where Connection goes.
 //
 // Chrome writes Connection right after Host, and a preset whose order names no
-// place for it keeps that. Firefox 159 and Safari 26 write it after
-// Accept-Encoding instead, and a preset says so by naming connection in its
+// place for it keeps that. Firefox 159 writes it after Origin and Safari 26
+// last, right after Cookie, and a preset says so by naming connection in its
 // order, as a caller's own order can. CompleteHeaderOrder leaves it out of the
 // sorted tail, so a Connection the caller only set keeps the preset's place.
 //
