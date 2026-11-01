@@ -2,9 +2,10 @@ package fingerprint
 
 import (
 	"fmt"
-	"net/netip"
 	"net/url"
 	"strings"
+
+	"github.com/sardanioss/httpcloak/internal/site"
 )
 
 // FetchMode represents the Sec-Fetch-Mode header value
@@ -537,26 +538,9 @@ func (p *Preset) SendsFullEncodingTo(u *url.URL) bool {
 	case FullEncodingNever:
 		return false
 	case FullEncodingLoopback:
-		return isLoopbackHost(u.Hostname())
+		return site.LoopbackHost(u.Hostname())
 	}
 	return true
-}
-
-// isLoopbackHost reports whether host is a loopback host as Chrome
-// (net::IsLocalhost) and Firefox (IsPotentiallyTrustworthyLoopbackHost) both
-// read it: localhost or a name under .localhost, in any case and with or
-// without a trailing dot, an IPv4 literal in 127.0.0.0/8, or exactly ::1.
-// Neither browser counts an IPv4-mapped ::ffff:127.0.0.1, which
-// net.IP.IsLoopback would.
-func isLoopbackHost(host string) bool {
-	if addr, err := netip.ParseAddr(host); err == nil {
-		if addr.Is4() {
-			return addr.As4()[0] == 127
-		}
-		return addr == netip.IPv6Loopback()
-	}
-	host = strings.ToLower(strings.TrimSuffix(host, "."))
-	return host == "localhost" || strings.HasSuffix(host, ".localhost")
 }
 
 // NewHeaderCoherence creates a new HeaderCoherence helper
