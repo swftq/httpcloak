@@ -5,6 +5,8 @@ import (
 	"net/netip"
 	"net/url"
 	"strings"
+
+	"github.com/sardanioss/httpcloak/internal/engine"
 )
 
 // FetchMode represents the Sec-Fetch-Mode header value
@@ -514,10 +516,10 @@ func (p *Preset) ResolveFullEncodingOverHTTP() string {
 	if p.FullEncodingOverHTTP != "" {
 		return p.FullEncodingOverHTTP
 	}
-	switch ua := p.UserAgent; {
-	case strings.Contains(ua, "Chrome/"), strings.Contains(ua, "Firefox/"):
+	switch engine.Of(p.UserAgent) {
+	case engine.Chromium, engine.Gecko:
 		return FullEncodingLoopback
-	case strings.Contains(ua, "AppleWebKit/"):
+	case engine.WebKit:
 		return FullEncodingNever
 	}
 	return FullEncodingAlways
