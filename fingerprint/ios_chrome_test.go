@@ -31,12 +31,18 @@ func TestIOSChromeHeaderOrder(t *testing.T) {
 			t.Errorf("%s not registered", name)
 			continue
 		}
-		// referer and upgrade-insecure-requests hold slots that an HTTPS
+		// referer, upgrade-insecure-requests, the body's headers and the
+		// marker for the caller's own hold slots that an HTTPS GET
 		// navigation leaves empty. WebKit 26 puts referer right after
-		// accept, as Safari 26 did on every subresource.
+		// accept, as Safari 26 did on every subresource, and the body's
+		// headers before accept-language, as on every Safari 26 request
+		// that had a body.
 		var got []string
 		for _, h := range p.H2HeaderOrder() {
-			if h != "referer" && h != "upgrade-insecure-requests" {
+			switch h {
+			case "referer", "upgrade-insecure-requests",
+				"content-type", "content-length", "transfer-encoding", "origin", OtherHeaders:
+			default:
 				got = append(got, h)
 			}
 		}
