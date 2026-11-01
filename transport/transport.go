@@ -22,6 +22,7 @@ import (
 	"github.com/sardanioss/httpcloak/fingerprint"
 	"github.com/sardanioss/httpcloak/internal/compress"
 	"github.com/sardanioss/httpcloak/internal/gunzip"
+	"github.com/sardanioss/httpcloak/internal/site"
 	"github.com/sardanioss/httpcloak/protocol"
 )
 
@@ -2117,6 +2118,7 @@ func (t *Transport) doHTTP1(ctx context.Context, req *Request) (*Response, error
 
 	mergeCallerHeaders(httpReq, req, "h1")
 	stripH1Priority(httpReq, req, snap.preset, effectiveTLSOnly)
+	stripUntrustworthyMetadata(httpReq, req, t.wireHeaders(snap.preset), effectiveTLSOnly)
 
 	// Record timing before request
 	reqStart := time.Now()
@@ -2223,6 +2225,7 @@ func (t *Transport) doHTTP1WithTLSConn(ctx context.Context, req *Request, alpnEr
 
 	mergeCallerHeaders(httpReq, req, "h1")
 	stripH1Priority(httpReq, req, snap.preset, effectiveTLSOnly)
+	stripUntrustworthyMetadata(httpReq, req, t.wireHeaders(snap.preset), effectiveTLSOnly)
 
 	// Record timing before request
 	reqStart := time.Now()
@@ -2335,6 +2338,7 @@ func (t *Transport) doHTTP2(ctx context.Context, req *Request) (*Response, error
 	applyPresetHeaders(httpReq, t.wireHeaders(snap.preset), t.effectiveHeaderOrder(req), t.getCustomPseudoOrder(), effectiveTLSOnly, "h2", req.Headers, req.DisableClientHints, req.ExactHeaders, shapeOf(req))
 
 	mergeCallerHeaders(httpReq, req, "h2")
+	stripUntrustworthyMetadata(httpReq, req, t.wireHeaders(snap.preset), effectiveTLSOnly)
 
 	// Record timing before request
 	reqStart := time.Now()
@@ -2473,6 +2477,7 @@ func (t *Transport) doHTTP3(ctx context.Context, req *Request) (*Response, error
 	applyPresetHeaders(httpReq, t.wireHeaders(snap.preset), t.effectiveHeaderOrder(req), t.getCustomPseudoOrder(), effectiveTLSOnly, "h3", req.Headers, req.DisableClientHints, req.ExactHeaders, shapeOf(req))
 
 	mergeCallerHeaders(httpReq, req, "h3")
+	stripUntrustworthyMetadata(httpReq, req, t.wireHeaders(snap.preset), effectiveTLSOnly)
 
 	// Record timing before request
 	reqStart := time.Now()
@@ -2780,6 +2785,13 @@ func isClientHintHeader(key string) bool {
 	return len(key) >= 7 && strings.EqualFold(key[:7], "sec-ch-")
 }
 
+// isSecFetchHeader reports whether a header key is a Fetch Metadata header:
+// Sec-Fetch-Site, -Mode, -Dest, -User or any other sec-fetch-* name.
+// Case-insensitive.
+func isSecFetchHeader(key string) bool {
+	return len(key) >= 10 && strings.EqualFold(key[:10], "sec-fetch-")
+}
+
 // CompleteHeaderOrder builds a header-order list that names every header the
 // request carries, so none is left to an encoder's map-iteration fallback.
 //
@@ -2906,7 +2918,7 @@ func presetSendsSecFetch(preset *fingerprint.Preset) bool {
 		// injected anyway - the opt-out failing for exactly the preset that
 		// asked for it, one field over from where it failed before.
 		for _, h := range preset.HeaderOrder {
-			if len(h.Key) >= 10 && strings.EqualFold(h.Key[:10], "sec-fetch-") {
+			if isSecFetchHeader(h.Key) {
 				return true
 			}
 		}
@@ -2914,7 +2926,7 @@ func presetSendsSecFetch(preset *fingerprint.Preset) bool {
 	}
 	// Only for presets that carry the backward-compatible map and no ordered list.
 	for name := range preset.Headers {
-		if len(name) >= 10 && strings.EqualFold(name[:10], "sec-fetch-") {
+		if isSecFetchHeader(name) {
 			return true
 		}
 	}
@@ -3084,6 +3096,39 @@ func stripH1Priority(httpReq *http.Request, req *Request, preset *fingerprint.Pr
 		return
 	}
 	delete(httpReq.Header, "Priority")
+}
+
+// stripUntrustworthyMetadata takes every Sec-Fetch-* and sec-ch-* header off a
+// request to a URL that is not potentially trustworthy, which for the schemes
+// sent here means http:// to a host that is not loopback; see
+// site.PotentiallyTrustworthy. Chromium, Gecko and WebKit add neither family
+// there, and take both off a redirect hop that comes down to such a URL.
+// Safari 26.3 sent none on any of its 19 requests to a LAN address, and
+// Chrome 156 and Firefox 159 none to a LAN name or address, nor on an
+// https-to-http hop, while each sent them all to localhost.
+//
+// It runs after the caller merge, so it reaches every source: the preset's,
+// the CORS sniff's, the session's (warmup, the Accept-CH hints, the values a
+// redirect hop carries), the bindings' fetch_mode and the caller's own. Each
+// has already shaped the request in applyPresetHeaders, through the sniff,
+// the priority table and the header-order lookup, so a fetch() keeps its
+// Accept, its priority and its header order. The order list may still name
+// the removed headers; the HTTP/1.1 writer writes only the names the map holds.
+//
+// ExactHeaders and TLS-only requests are left alone, since the caller composes
+// the header set in both, and so is a preset with no Sec-Fetch-* in its emit
+// set, which does not describe a browser (presetSendsSecFetch). Only HTTP/1.1
+// carries http://, so on HTTP/2 and HTTP/3 this returns at once.
+func stripUntrustworthyMetadata(httpReq *http.Request, req *Request, wire *presetWireHeaders, tlsOnly bool) {
+	if len(req.ExactHeaders) > 0 || tlsOnly || !wire.sendsSecFetch ||
+		httpReq.URL == nil || site.PotentiallyTrustworthy(httpReq.URL) {
+		return
+	}
+	for key := range httpReq.Header {
+		if isSecFetchHeader(key) || isClientHintHeader(key) {
+			delete(httpReq.Header, key)
+		}
+	}
 }
 
 // wireHeaderPair is one preset header ready to write: the key is already in

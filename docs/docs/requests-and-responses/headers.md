@@ -41,6 +41,8 @@ A frame's navigation keeps navigation mode but drops `sec-fetch-user`. Set `Sec-
 
 Over plain `http://`, `accept-encoding` drops to `gzip, deflate` where the browser drops it. Chrome and Firefox keep their full list only for a loopback host (`localhost`, a name under `.localhost`, `127.0.0.0/8` or `::1`). Safari, and every browser on iOS, sends `gzip, deflate` on every plain-HTTP request, localhost included. HTTPS always carries the preset's own list. A custom preset can change the rule with [`headers.full_encoding_over_http`](../reference/json-preset-spec.md#headers-object).
 
+No `sec-fetch-*` or `sec-ch-*` header goes to a plain `http://` host other than `localhost`, a name under `.localhost`, `127.0.0.0/8` or `[::1]`. Browsers send neither family to a URL that isn't potentially trustworthy, and take both off a redirect hop that comes down to one, so each hop follows its own URL. The request still takes its shape from them: a `fetch()`-shaped POST keeps `accept: */*`, its priority and its header order. Values you set yourself are dropped too, `fetch_mode` in the bindings included. `ExactHeaders` sends them anyway, and so do TLS-only requests and a custom preset whose header order has no `sec-fetch-*`.
+
 ## Setting custom headers
 
 Two scopes: per-request, or session-wide as a default.

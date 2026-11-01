@@ -124,7 +124,7 @@ session.options(url, ...) -> Response
 session.request(method, url, data=None, json=None, ...) -> Response
 ```
 
-`stream=True` returns a `StreamResponse` instead of a buffered `Response`. `json={...}` JSON-encodes the body and sets `Content-Type: application/json`. `data={...}` does form encoding. `files={...}` does multipart uploads.
+`stream=True` returns a `StreamResponse` instead of a buffered `Response`. `json={...}` JSON-encodes the body and sets `Content-Type: application/json`. `data={...}` does form encoding. `files={...}` does multipart uploads. `fetch_mode=` overrides the auto-detected `Sec-Fetch-Mode` and `Sec-Fetch-Dest`; to a plain `http://` host that isn't loopback neither goes on the wire, as in a browser, and the mode only shapes the request. A TLS-only session, which every `ja3` session is, sends them as set.
 
 ### Streaming methods
 

@@ -19,7 +19,7 @@ Anti-bot vendors watch this because a single-weight H2 PRIORITY frame on every r
 
 ## How httpcloak picks the priority
 
-The transport reads `Sec-Fetch-Dest` from the outgoing request and looks it up in a 14-destination table:
+The transport reads `Sec-Fetch-Dest` from the outgoing request and looks it up in a 14-destination table. A plain `http://` request to a host that isn't loopback carries no `Sec-Fetch-*` on the wire, as in a browser, but its destination still picks the priority:
 
 | Sec-Fetch-Dest | Urgency | Incremental | Header sent |
 |---|---|---|---|
