@@ -319,14 +319,17 @@ func TestSessionUpgradeInsecureRequestsSkipsExactAndTLSOnly(t *testing.T) {
 }
 
 // The header goes in before the order is chosen, so the order places it like
-// any other. Where the preset's table has a slot for it, as WebKit 26's does,
-// it goes right after User-Agent, where Safari 26.3 sent it
-// (run-20261031-234946 h1.log:3-14); a custom preset on safari-18 with
-// WebKit 26's table stands in for the presets that have one, as no built-in
-// here does. The pre-26 WebKit tables have none, so it joins the sorted tail
-// of headers they leave out, ahead of a caller's X-Probe; added after the
-// order, it would come after every ordered header. Where Safari 17 and 18
-// put it was not captured.
+// any other. On a navigation that carries only its own headers it goes right
+// after User-Agent, where Safari 26.3 sent it (run-20261031-234946 h1.log:2-14,
+// and 7450-7459 to a LAN address). The built-in WebKit 26 presets get there
+// through the cfnetwork model, which lays the request out with the header among
+// its names; TestSessionWebKit26PlainHTTPLayout checks the frame's navigation
+// with a Referer as well. Their table has a slot right after user-agent too,
+// which a custom preset on safari-18 with that table, on the list model,
+// checks. The pre-26 WebKit tables have none, so it joins the sorted tail of
+// headers they leave out, ahead of a caller's X-Probe; added after the order,
+// it would come after every ordered header. Where Safari 17 and 18 put it was
+// not captured.
 func TestSessionUpgradeInsecureRequestsInTheHeaderOrder(t *testing.T) {
 	const custom = "uir-webkit-26-table"
 	spec := `{"version":1,"preset":{"name":"` + custom + `","based_on":"safari-18","http2":{"hpack_header_order":[` +
