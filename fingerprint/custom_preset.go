@@ -199,6 +199,10 @@ type HTTP2Spec struct {
 	// PriorityAlwaysUrgency writes u= in the priority header even at the
 	// default urgency; see H2FingerprintConfig.PriorityAlwaysUrgency.
 	PriorityAlwaysUrgency *bool `json:"priority_always_urgency,omitempty"`
+
+	// HeaderOrderModel is "list" or "cfnetwork"; see
+	// H2FingerprintConfig.HeaderOrderModel. Omitted means "list".
+	HeaderOrderModel *string `json:"header_order_model,omitempty"`
 }
 
 // ResourcePrioritySpec is the JSON shape of fingerprint.ResourcePriority.
@@ -1091,6 +1095,7 @@ func applyHTTP2(p *Preset, spec *HTTP2Spec) error {
 		spec.HPACKNeverIndex != nil || spec.HPACKRepresentation != nil ||
 		spec.StreamPriorityMode != nil ||
 		spec.DisableCookieSplit != nil || spec.PriorityTable != nil ||
+		spec.HeaderOrderModel != nil ||
 		spec.DataFrameMaxSize != nil || spec.PrefacePingIdleMs != nil ||
 		spec.PrefacePingHangMs != nil || spec.IdlePingMs != nil ||
 		spec.PriorityModel != nil || spec.PriorityOverHTTP1 != nil ||
@@ -1172,6 +1177,9 @@ func applyHTTP2(p *Preset, spec *HTTP2Spec) error {
 		}
 		if spec.PriorityAlwaysUrgency != nil {
 			p.H2Config.PriorityAlwaysUrgency = *spec.PriorityAlwaysUrgency
+		}
+		if spec.HeaderOrderModel != nil {
+			p.H2Config.HeaderOrderModel = *spec.HeaderOrderModel
 		}
 	}
 
@@ -1522,6 +1530,13 @@ func validatePreset(p *Preset, spec *PresetSpec) error {
 			case PriorityModelChromium, PriorityModelTable:
 			default:
 				return fmt.Errorf("invalid priority_model: %q (must be chromium/table)", *spec.HTTP2.PriorityModel)
+			}
+		}
+		if spec.HTTP2.HeaderOrderModel != nil {
+			switch *spec.HTTP2.HeaderOrderModel {
+			case HeaderOrderModelList, HeaderOrderModelCFNetwork:
+			default:
+				return fmt.Errorf("invalid header_order_model: %q (must be list/cfnetwork)", *spec.HTTP2.HeaderOrderModel)
 			}
 		}
 		for dest, rp := range spec.HTTP2.PriorityTable {

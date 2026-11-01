@@ -78,7 +78,7 @@ Notes:
 - The Chrome 152 JA4 tail is only stable against a tool that discards greased values inside `signature_algorithms`, which the specification asks for but not every implementation does. Chrome 152 puts one at the head of that list per handshake, so an implementation that keeps it reports a different tail every connection, sixteen in all. Real Chrome does the same, so a moving tail is the profile working. The value above was measured against one that strips.
 - `safari-18` and `safari-18-ios` share JA4 + Akamai because the H2 stack is identical. The JA3 differs because of platform-specific ClientHello extensions.
 
-For any preset not listed, run the same capture yourself. The static parts (UA, sec-ch-ua, header order) are also visible in `fingerprint/embedded/<name>.json`.
+For any preset not listed, run the same capture yourself. The static parts (UA, sec-ch-ua, header order) are also visible in `fingerprint/embedded/<name>.json`; on a preset with `header_order_model: "cfnetwork"` the listed order is the one `client.Client` sends.
 
 ---
 
@@ -206,6 +206,7 @@ Safari macOS:
 - Pseudo order `m,s,p,a` on 18, `m,s,a,p` on 26.
 - `NO_RFC7540_PRIORITIES=1`. Safari opts out of stream priorities. Safari 26 also puts no priority fields on HEADERS, and sends an RFC 9218 `priority` header on every request, HTTP/1.1 included.
 - No `sec-ch-ua` (Safari doesn't ship Client Hints). Header order is shorter than Chrome's. Safari 26 sends no `Sec-Fetch-User`.
+- Header order on 26: `header_order_model: "cfnetwork"`. A `Session` or `Transport` lays each request out from the headers it carries, as Safari 26.3 does. A request with only a navigation's own headers, `Sec-Fetch-Dest`, `User-Agent`, `Accept`, `Sec-Fetch-Site` and `Sec-Fetch-Mode` with a `Referer` or, on `http://`, `Upgrade-Insecure-Requests`, keeps the navigation order, and any other header but `Pragma`, even as the sixth, goes inside that block where Safari's hash puts it; a sixth `Pragma` comes first instead and puts `Accept` before `User-Agent`. With seven names or more, such as a `fetch()` POST or an `http://` navigation with a `Referer`, the request comes out in another order; see [`header_order_model`](./json-preset-spec#header_order_model). `chrome-148-ios` and later do the same. `client.Client` still sends the `hpack_header_order` list.
 - Default Akamai on 18: `2:0;4:2097152;3:100;5:16384;9:1|10485760|0|m,s,p,a`. On 26: `2:0;3:100;4:2097152;9:1|10420225|0|m,s,a,p`, the same as `chrome-155-ios`, since Chrome on iOS runs on WebKit.
 
 ---
@@ -224,7 +225,7 @@ iOS Safari shares the H2 fingerprint with macOS Safari but ships a slightly diff
 
 ## Per-preset details
 
-For the static parts of a preset (UA, sec-ch-ua, header order, H2 settings), the source of truth is the JSON in `fingerprint/embedded/` for v147 and newer, or the Go function in `fingerprint/presets.go` for v146 and older.
+For the static parts of a preset (UA, sec-ch-ua, header order, H2 settings), the source of truth is the JSON in `fingerprint/embedded/` for v147 and newer, or the Go function in `fingerprint/presets.go` for v146 and older; on a preset with `header_order_model: "cfnetwork"` the listed order is the one `client.Client` sends.
 
 To dump any registered preset as canonical JSON:
 

@@ -59,5 +59,36 @@ func TestSafari26Presets(t *testing.T) {
 				t.Errorf("%s: navigation sends %s; Safari 26 sent neither over HTTPS", c.name, hp.Key)
 			}
 		}
+		if got := p.H2HeaderOrderModel(); got != HeaderOrderModelCFNetwork {
+			t.Errorf("%s: header order model %q, want %q", c.name, got, HeaderOrderModelCFNetwork)
+		}
+	}
+
+	// Safari 26 orders a request's headers by the CoreFoundation dictionary
+	// that holds them, and so does Chrome on iOS from 148 on, which runs on
+	// the same WebKit; that part is inferred, since Chrome on iOS was not
+	// captured. Every other preset keeps its listed orders, and describes as
+	// it did.
+	model := []string{"safari-26", "safari-26-ios", "chrome-148-ios", "chrome-150-ios", "chrome-151-ios",
+		"chrome-152-ios", "chrome-155-ios"}
+	for _, name := range Available() {
+		p := Get(name)
+		want := HeaderOrderModelList
+		if slices.Contains(model, p.Name) {
+			want = HeaderOrderModelCFNetwork
+		}
+		if got := p.H2HeaderOrderModel(); got != want {
+			t.Errorf("%s: header order model %q, want %q", name, got, want)
+		}
+		desc, err := Describe(name)
+		if err != nil {
+			t.Fatalf("%s: describe: %v", name, err)
+		}
+		if has := strings.Contains(desc, `"header_order_model": "cfnetwork"`); has != (want == HeaderOrderModelCFNetwork) {
+			t.Errorf("%s: describe writes header_order_model cfnetwork: %v, want %v", name, has, !has)
+		}
+		if want == HeaderOrderModelList && strings.Contains(desc, "header_order_model") {
+			t.Errorf("%s: describe writes header_order_model for a preset that does not set it", name)
+		}
 	}
 }

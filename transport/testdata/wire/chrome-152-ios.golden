@@ -111,16 +111,16 @@ HEADERS stream=7 flags=0x4
   indexed 7                                                    :scheme: https
   indexed 73                                                   :authority: 127.0.0.1:PORT
   incremental name=4 value-huffman=false                       :path: /c
-  incremental name=72 value-huffman=true                       sec-fetch-dest: empty
-  indexed 72                                                   user-agent: Mozilla/5.0 (iPhone; CPU iPhone OS 26_6_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/152.0.7977.64 Mobile/15E148 Safari/604.1
   incremental name=19 value-huffman=false                      accept: */*
+  incremental name=31 value-huffman=true                       content-type: application/json
   incremental name=71 value-huffman=true                       sec-fetch-site: cross-site
   incremental name=71 value-huffman=true                       sec-fetch-mode: cors
-  indexed 71                                                   accept-language: en-US,en;q=0.9
-  incremental name=70 value-huffman=true                       priority: u=3, i
-  indexed 70                                                   accept-encoding: gzip, deflate, br, zstd
-  incremental name=31 value-huffman=true                       content-type: application/json
+  indexed 75                                                   user-agent: Mozilla/5.0 (iPhone; CPU iPhone OS 26_6_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/152.0.7977.64 Mobile/15E148 Safari/604.1
   incremental name=28 value-huffman=false                      content-length: 7
+  incremental name=77 value-huffman=true                       sec-fetch-dest: empty
+  indexed 73                                                   accept-language: en-US,en;q=0.9
+  incremental name=72 value-huffman=true                       priority: u=3, i
+  indexed 72                                                   accept-encoding: gzip, deflate, br, zstd
 DATA stream=7 flags=0x1 len=7
 
 ## http/1.1
@@ -164,16 +164,16 @@ Accept-Encoding: gzip, deflate, br, zstd
 POST /c HTTP/1.1
 Host: 127.0.0.1:PORT
 Connection: keep-alive
-Sec-Fetch-Dest: empty
-User-Agent: Mozilla/5.0 (iPhone; CPU iPhone OS 26_6_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/152.0.7977.64 Mobile/15E148 Safari/604.1
 Accept: */*
+Content-Type: application/json
 Sec-Fetch-Site: cross-site
 Sec-Fetch-Mode: cors
+User-Agent: Mozilla/5.0 (iPhone; CPU iPhone OS 26_6_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/152.0.7977.64 Mobile/15E148 Safari/604.1
+Content-Length: 7
+Sec-Fetch-Dest: empty
 Accept-Language: en-US,en;q=0.9
 Priority: u=3, i
 Accept-Encoding: gzip, deflate, br, zstd
-Content-Type: application/json
-Content-Length: 7
 body "{\"k\":1}"
 
 ## quic client hello
@@ -253,15 +253,15 @@ HEADERS
   indexed static=true 23
   literal name-ref static=true 0 never=false huffman=true "127.0.0.1:PORT"
   literal name-ref static=true 1 never=false huffman=true "/c"
-  literal name="sec-fetch-dest" name-huffman=true never=false huffman=true "empty"
-  literal name-ref static=true 95 never=false huffman=true "Mozilla/5.0 (iPhone; CPU iPhone OS 26_6_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/152.0.7977.64 Mobile/15E148 Safari/604.1"
   indexed static=true 29
+  indexed static=true 46
   literal name="sec-fetch-site" name-huffman=true never=false huffman=true "cross-site"
   literal name="sec-fetch-mode" name-huffman=true never=false huffman=true "cors"
+  literal name-ref static=true 95 never=false huffman=true "Mozilla/5.0 (iPhone; CPU iPhone OS 26_6_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/152.0.7977.64 Mobile/15E148 Safari/604.1"
+  literal name="sec-fetch-dest" name-huffman=true never=false huffman=true "empty"
   literal name-ref static=true 72 never=false huffman=true "en-US,en;q=0.9"
   literal name="priority" name-huffman=true never=false huffman=true "u=3, i"
   literal name-ref static=true 31 never=false huffman=true "gzip, deflate, br, zstd"
-  indexed static=true 46
   literal name-ref static=true 4 never=false huffman=true "7"
 DATA len=7
 
@@ -359,7 +359,8 @@ DATA len=7
       },
       "priority_model": "table",
       "priority_over_http1": true,
-      "priority_always_urgency": true
+      "priority_always_urgency": true,
+      "header_order_model": "cfnetwork"
     },
     "http3": {
       "qpack_max_table_capacity": 16383,

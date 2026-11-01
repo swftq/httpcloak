@@ -338,6 +338,54 @@ resource type.
 | `priority_model` | string | `"chromium"` or `"table"`. On `chromium` a request's own `priority` header picks its weight and each new stream chains onto the newest open stream at the same or a higher priority, as Chrome does. On `table` the weight always comes from the table and every stream's parent is 0, as in Firefox. Omitted derives it from `stream_exclusive`. See [Per-Resource Priority](../fingerprinting/per-resource-priority). |
 | `priority_over_http1` | bool | Whether the priority header also goes out over HTTP/1.1. Firefox sends it there; Chrome, on every platform, does not. Omitted derives it from the model, and `describe` always writes it out. |
 | `priority_always_urgency` | bool | Write `u=` in the priority header even at the default urgency, 3: `u=3, i` rather than `i`. Safari 26 does; Chrome leaves the default out, and so does a preset without this. |
+| `header_order_model` | string | `"list"` or `"cfnetwork"`: where each request's header order comes from. See below. |
+
+### `header_order_model`
+
+Where each request's header order comes from.
+
+```json
+"http2": {
+  "pseudo_order":       [":method", ":scheme", ":authority", ":path"],
+  "header_order_model": "cfnetwork",
+  "hpack_header_order": ["sec-fetch-dest", "user-agent", "..."]
+}
+```
+
+`"list"`, the default, takes it from `hpack_header_order` and
+`hpack_header_order_subresource`, by the request's `sec-fetch-dest`.
+`"cfnetwork"` computes it from the names the request carries, which is what
+Safari 26 does. Safari has no order per kind of request. It sends the headers a
+request carries itself in the iteration order of the CoreFoundation dictionary
+that holds them, keyed by the lowercased name, and then the ones CFNetwork adds:
+`accept-language`, `priority`, `accept-encoding`, `cookie`, and `connection` on
+HTTP/1.1. Where a name lands depends on CFString's hash of it and on how many
+names there are, because the dictionary has 3, 7, 13 or 23 buckets and re-adds
+every name each time it grows.
+
+So a request that carries only a navigation's own headers, `sec-fetch-dest`,
+`user-agent`, `accept`, `sec-fetch-site` and `sec-fetch-mode`, with a `referer`
+or, on `http://`, `upgrade-insecure-requests`, comes out in Safari's navigation
+order: `sec-fetch-dest`, `user-agent`, `accept`, `referer`, `sec-fetch-site`,
+`sec-fetch-mode`, with `upgrade-insecure-requests` right before `accept`. Of the
+captured requests whose order was logged, every navigation, image and plain
+`fetch()` GET over HTTPS was one. Any other header but `pragma`, even as the
+sixth, goes inside that block where the hash puts it: a CORS `fetch()` GET with
+an `origin` and no `referer` sends `sec-fetch-dest`, `user-agent`, `accept`,
+`sec-fetch-site`, `origin`, `sec-fetch-mode`. A sixth `pragma` comes first
+instead and puts `accept` before `user-agent`. A `fetch()` POST, a `sendBeacon`,
+a `fetch()` with `cache: 'no-store'` or an `XMLHttpRequest` with headers of its
+own carries seven or more and comes out in another order. A `fetch()` POST with
+`cache: 'no-store'`, for example, sends `accept`, `content-type`, `origin`,
+`pragma`, `sec-fetch-site`, `content-length`, `sec-fetch-mode`, `user-agent`,
+`referer`, `sec-fetch-dest`, `cache-control`. A header you set goes where Safari
+puts a header of that name that a page set, ahead of the ones CFNetwork adds.
+
+The Safari 26 presets and Chrome on iOS from 148 on use `"cfnetwork"`; every
+other preset uses `"list"`. Such a preset still needs `hpack_header_order`, which
+orders every request sent through `client.Client`. `Request.HeaderOrder` and
+`SetHeaderOrder` still come first, and `ExactHeaders` are sent as given.
+`describe` writes the key only for a preset that sets it.
 
 ### `priority_table`
 

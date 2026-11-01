@@ -76,6 +76,7 @@ func TestHeaderPipelineMatchesThePreviousOne(t *testing.T) {
 								}
 								old, cur := mk(), mk()
 								frozenApplyPresetHeaders(old, preset, order, nil, tlsOnly, proto, req.Headers, strip, exact)
+								changedSinceTheFreeze(old, preset, order, proto, req.Headers, exact)
 								frozenMergeCallerHeaders(old, req)
 								applyPresetHeaders(cur, tr.wireHeaders(preset), order, nil, tlsOnly, proto, req.Headers, strip, exact)
 								mergeCallerHeaders(cur, req)
@@ -112,6 +113,28 @@ func TestHeaderPipelineMatchesThePreviousOne(t *testing.T) {
 		}
 	}
 	t.Logf("%d request cases identical", cases)
+}
+
+// changedSinceTheFreeze applies to the reference's result the changes made on
+// purpose after it was frozen, so the frozen code itself stays as it was and
+// every difference from it is listed here:
+//
+//   - A preset whose H2HeaderOrderModel is cfnetwork, Safari 26 and Chrome on
+//     iOS from 148 on, takes its order from the names the request carries
+//     (fingerprint.Preset.CFNetworkHeaderOrder) in place of the list
+//     H2HeaderOrderFor gives. The reference's order is rebuilt from that with
+//     the frozen completion, so CompleteHeaderOrder is still compared, and
+//     every other preset compares as it did.
+//
+// It runs before the caller's headers merge, as the pipeline's order does, and
+// works out the request's names the same way: the caller's from userHeaders,
+// and the ones proto's writer sends.
+func changedSinceTheFreeze(req *http.Request, preset *fingerprint.Preset, explicit []string, proto string, userHeaders map[string][]string, exact []fingerprint.HeaderPair) {
+	if len(exact) > 0 || preset.H2HeaderOrderModel() != fingerprint.HeaderOrderModelCFNetwork {
+		return
+	}
+	order := preset.CFNetworkHeaderOrder(requestHeaderNames(req.Header, userHeaders, proto), bodyHeader(req, userHeaders, proto))
+	req.Header[http.HeaderOrderKey] = frozenCompleteHeaderOrder(explicit, order, req.Header, userHeaders)
 }
 
 func dumpHeader(h http.Header) string {
