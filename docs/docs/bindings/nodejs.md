@@ -160,7 +160,7 @@ One case where it is: a session cache set up with `configureSessionCache`. Its c
 }
 ```
 
-`fetchMode` overrides the auto-detected `Sec-Fetch-Mode` / `Sec-Fetch-Dest` / `Sec-Fetch-Site` triplet. The override matters when the auto-sniff gets it wrong; POSTs to CORS endpoints without a JSON Accept header are the usual offender.
+`fetchMode` overrides the auto-detected `Sec-Fetch-Mode` / `Sec-Fetch-Dest` / `Sec-Fetch-Site` triplet. The override matters when the auto-sniff gets it wrong; POSTs to CORS endpoints without a JSON Accept header are the usual offender. To a plain `http://` host that isn't loopback none of the three goes on the wire, as in a browser, and the mode only shapes the request. A TLS-only session, which every `ja3` session is, sends them as set.
 
 ### Streaming
 

@@ -98,7 +98,7 @@ Task<Response> OptionsAsync(string url, ...);
 Task<Response> RequestAsync(string method, string url, string? body = null, ...);
 ```
 
-Common kwargs across all of them: `headers`, `parameters`, `cookies`, `auth`, `timeout`, `cancellationToken`, `fetchMode`. The JSON variants serialise `data` to JSON and add `Content-Type: application/json`.
+Common kwargs across all of them: `headers`, `parameters`, `cookies`, `auth`, `timeout`, `cancellationToken`, `fetchMode`. The JSON variants serialise `data` to JSON and add `Content-Type: application/json`. `fetchMode` overrides the auto-detected `Sec-Fetch-Mode` and `Sec-Fetch-Dest`; to a plain `http://` host that isn't loopback neither goes on the wire, as in a browser, and the mode only shapes the request. A TLS-only session, which every `ja3` session is, sends them as set.
 
 ```csharp
 var r = await s.PostJsonAsync("https://httpbin.org/post", new { hello = "world" });

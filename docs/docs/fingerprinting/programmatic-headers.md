@@ -13,7 +13,7 @@ This chapter is a tour of the surface. The types and functions all live in `gith
 
 ## The Sec-Fetch family
 
-`Sec-Fetch-Site`, `Sec-Fetch-Mode`, `Sec-Fetch-Dest`, and `Sec-Fetch-User` are four headers Chrome adds to every request. Together they tell the server how the request was triggered and what kind of resource it expects back. Anti-bot vendors check that the four values are coherent (e.g. an image load can't claim `Sec-Fetch-Mode: navigate`) and that they line up with the URL pattern (e.g. an XHR to an API path shouldn't carry `Sec-Fetch-Site: none`). Get any of them wrong and the request looks synthetic.
+`Sec-Fetch-Site`, `Sec-Fetch-Mode`, `Sec-Fetch-Dest`, and `Sec-Fetch-User` are four headers Chrome adds to every request to a potentially trustworthy URL: any `https://` URL, and an `http://` one only to `localhost`, a name under `.localhost`, `127.0.0.0/8` or `[::1]`. Together they tell the server how the request was triggered and what kind of resource it expects back. Anti-bot vendors check that the four values are coherent (e.g. an image load can't claim `Sec-Fetch-Mode: navigate`) and that they line up with the URL pattern (e.g. an XHR to an API path shouldn't carry `Sec-Fetch-Site: none`). Get any of them wrong and the request looks synthetic.
 
 `Sec-Fetch-Mode` describes how the request was made:
 
@@ -125,7 +125,7 @@ h := fingerprint.GenerateSecFetchHeaders(ctx)
 
 ## GenerateClientHints
 
-Client Hints are the `sec-ch-ua-*` family Chrome started shipping in 2021 to advertise the browser brand, version, platform, and (after server opt-in) high-entropy details like architecture and full version. The low-entropy hints go on every request. The high-entropy hints only go on requests to origins that have asked for them via an `Accept-CH` response header.
+Client Hints are the `sec-ch-ua-*` family Chrome started shipping in 2021 to advertise the browser brand, version, platform, and (after server opt-in) high-entropy details like architecture and full version. The low-entropy hints go on every request to a potentially trustworthy URL, the same rule as the Sec-Fetch family above. The high-entropy hints go only on such requests, to origins that have asked for them via an `Accept-CH` response header.
 
 Chrome's quoted-list format is unusual. The browser brands are emitted as a comma-separated list of `"brand";v="version"` triples, including a fake "Not_A Brand" entry that exists to discourage servers from string-matching the brand list:
 
@@ -222,6 +222,6 @@ The Python, Node, and .NET bindings do not currently expose the `fingerprint` pa
 If you need explicit programmatic header control from a binding, two paths work:
 
 1. Build the headers Go-side and surface them to the binding through your own thin service. A small Go program that exposes `GenerateXHRHeaders` over a local socket or HTTP endpoint covers most use cases.
-2. Set the `Sec-Fetch-*` values directly via the request `headers` argument the binding already accepts. The session layer respects caller-supplied headers and won't overwrite values you set explicitly, so you get the same end result without going through the helper types.
+2. Set the `Sec-Fetch-*` values directly via the request `headers` argument the binding already accepts. The session layer respects caller-supplied headers and won't overwrite values you set explicitly, so you get the same end result without going through the helper types. The exception is a plain `http://` URL to a host that isn't loopback, where no browser sends `Sec-Fetch-*` or client hints: the session drops them there, yours included, unless the request uses exact headers, the session is TLS-only (as every `ja3` session is), or a custom preset sends no `Sec-Fetch-*`.
 
 For binding users whose flows are plain GET / POST / XHR with the session-tracked referrer behaviour, neither path is needed. The defaults match what real Chrome sends on the same request.
