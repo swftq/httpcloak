@@ -5,6 +5,7 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/sardanioss/httpcloak/internal/engine"
 	"github.com/sardanioss/httpcloak/internal/site"
 )
 
@@ -616,10 +617,10 @@ func (p *Preset) ResolveFullEncodingOverHTTP() string {
 	if p.FullEncodingOverHTTP != "" {
 		return p.FullEncodingOverHTTP
 	}
-	switch ua := p.UserAgent; {
-	case strings.Contains(ua, "Chrome/"), strings.Contains(ua, "Firefox/"):
+	switch engine.Of(p.UserAgent) {
+	case engine.Chromium, engine.Gecko:
 		return FullEncodingLoopback
-	case strings.Contains(ua, "AppleWebKit/"):
+	case engine.WebKit:
 		return FullEncodingNever
 	}
 	return FullEncodingAlways

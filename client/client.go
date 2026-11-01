@@ -62,6 +62,7 @@ import (
 	"github.com/klauspost/compress/zstd"
 	"github.com/sardanioss/httpcloak/fingerprint"
 	"github.com/sardanioss/httpcloak/internal/compress"
+	"github.com/sardanioss/httpcloak/internal/engine"
 	"github.com/sardanioss/httpcloak/internal/gunzip"
 	"github.com/sardanioss/httpcloak/internal/site"
 	"github.com/sardanioss/httpcloak/pool"
@@ -2348,7 +2349,13 @@ func applyNavigationModeHeaders(httpReq *http.Request, preset *fingerprint.Prese
 	if dest, ok := getHeaderCaseInsensitive(req.Headers, "Sec-Fetch-Dest"); !omitsSecFetchUser(preset) && (!ok || len(dest) == 0 || strings.EqualFold(dest[0], "document")) {
 		httpReq.Header.Set("Sec-Fetch-User", "?1")
 	}
-	httpReq.Header.Set("Upgrade-Insecure-Requests", "1")
+	// WebKit adds Upgrade-Insecure-Requests only to the load of a document or
+	// an iframe whose URL is not https (CachedResourceLoader::requestResource).
+	// Do sends https alone, so a Safari or iOS preset sends none; Chrome and
+	// Firefox send it on every navigation.
+	if engine.Of(preset.UserAgent) != engine.WebKit || !strings.EqualFold(httpReq.URL.Scheme, "https") {
+		httpReq.Header.Set("Upgrade-Insecure-Requests", "1")
+	}
 
 	// Priority header (newer Chrome/Firefox)
 	if v, ok := preset.Headers["Priority"]; ok {
