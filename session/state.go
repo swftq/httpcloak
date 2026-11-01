@@ -74,4 +74,5 @@ type CookieState struct {
 	HttpOnly  bool       `json:"http_only,omitempty"`
 	SameSite  string     `json:"same_site,omitempty"`
 	CreatedAt *time.Time `json:"created_at,omitempty"` // v5: for sorting
+	StoredAt  *time.Time `json:"stored_at,omitempty"`  // the last store, for sorting; absent on older files, which load created_at in its place
 }
