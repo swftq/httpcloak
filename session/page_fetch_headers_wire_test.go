@@ -325,9 +325,10 @@ func TestPageFetchHeadersOnAStream(t *testing.T) {
 
 // Outside cors mode, Fetch's default referrer policy turns the page's origin
 // into "null" from an https page to a URL that is not https; Chrome 156 and
-// Firefox 159 did so on such a redirect hop of a form POST. Over plain HTTP
-// only Origin is checked: browsers send no Sec-Fetch-* to a URL there that is
-// not potentially trustworthy, which the session does not model yet.
+// Firefox 159 did so on such a redirect hop of a form POST. Browsers send no
+// Sec-Fetch-* to a plain-HTTP URL that is not potentially trustworthy, and the
+// transport takes the session's values off such a request, the caller's
+// Sec-Fetch-Mode included, so none may arrive.
 func TestPageFetchHeadersToAPlainHTTPURL(t *testing.T) {
 	srv := newPageFetchServer(t, "a.test", false)
 	httpsPage := "https://a.test/app/page.html"
@@ -349,7 +350,10 @@ func TestPageFetchHeadersToAPlainHTTPURL(t *testing.T) {
 			path := "/plain/" + preset + "/" + strings.ReplaceAll(c.name, " ", "-")
 			c.headers["Referer"] = []string{c.referer}
 			pageFetchSend(t, s, &transport.Request{Method: "POST", URL: srv.url + path, Headers: c.headers, Body: []byte("b=2")})
-			wantValues(t, what, "Origin", srv.hit(t, path).origin, c.origin...)
+			h := srv.hit(t, path)
+			wantValues(t, what, "Origin", h.origin, c.origin...)
+			wantValues(t, what, "Sec-Fetch-Site", h.site)
+			wantValues(t, what, "Sec-Fetch-Mode", h.mode)
 		}
 	}
 }

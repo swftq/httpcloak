@@ -3502,6 +3502,11 @@ func statedCORS(initiator string, userHeaders map[string][]string) bool {
 // A TLS-only request writes none, and neither does a preset that sends no
 // Sec-Fetch-*.
 //
+// It is the mode the request is shaped for, and the header reaches the wire
+// only on a potentially trustworthy URL: stripUntrustworthyMetadata takes it
+// off an http:// request to a host that is not loopback, which still goes out
+// in that mode's shape.
+//
 // The session reads it to give each redirect hop the Origin a browser's request
 // of that mode would carry, so the two headers agree on the wire.
 func (t *Transport) FetchMode(req *Request) string {
@@ -3552,6 +3557,11 @@ func headerVal(h map[string][]string, name string) string {
 // carries none: TLS-only with no caller value, or a preset that sends no
 // Sec-Fetch metadata. The session reads it to tell a top-level navigation
 // from everything else.
+//
+// It is the destination the request is shaped for, and the header reaches the
+// wire only on a potentially trustworthy URL: stripUntrustworthyMetadata takes
+// it off an http:// request to a host that is not loopback, which still goes
+// out shaped for that destination.
 func (t *Transport) SentFetchDest(req *Request) string {
 	tlsOnly := t.tlsOnly
 	if req.TLSOnly != nil {

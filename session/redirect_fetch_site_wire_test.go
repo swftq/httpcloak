@@ -162,7 +162,7 @@ func TestRedirectHopSecFetchSite(t *testing.T) {
 		label   string
 		chain   []string // the origin each request went to, in order
 		headers map[string][]string
-		want    []string // per request; "" is not checked
+		want    []string // per request; "" is no Sec-Fetch-Site at all
 	}{
 		// A typed navigation sends none on every hop, even through b.test.
 		{"typed", []string{"M", "X", "S", "M"}, nil, []string{"none", "none", "none", "none"}},
@@ -194,9 +194,9 @@ func TestRedirectHopSecFetchSite(t *testing.T) {
 		{"nav-sub-back", []string{"M", "S", "M"}, navigate, []string{"same-origin", "same-site", "same-site"}},
 
 		// Down to plain HTTP and back. Neither browser sent any Sec-Fetch-*
-		// to http://a.test, which is not potentially trustworthy, while the
-		// session still sends the header there, so that hop is not checked.
-		// Back on https both sent cross-site: http and https are two sites.
+		// to http://a.test, which is not potentially trustworthy, and the
+		// transport takes the carried value off that hop too. Back on https
+		// both sent cross-site: http and https are two sites.
 		{"nav-down-up", []string{"M", "D", "M"}, navigate, []string{"same-origin", "", "cross-site"}},
 	}
 
@@ -226,9 +226,6 @@ func TestRedirectHopSecFetchSite(t *testing.T) {
 						}
 						if len(h.site) > 1 {
 							t.Errorf("%s: request %d carried %d Sec-Fetch-Site fields %q", c.label, i, len(h.site), h.site)
-						}
-						if c.want[i] == "" {
-							continue
 						}
 						got := ""
 						if len(h.site) > 0 {
