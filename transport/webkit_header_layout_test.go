@@ -227,12 +227,21 @@ func TestWebKitHeaderLayoutOnTheWire(t *testing.T) {
 		// insertion order that fits the captures predicts the same orders.
 		//
 		// TLS-only adds none of the preset's headers and sets User-Agent to
-		// "", which HTTP/2 drops and HTTP/1.1 writes as "User-Agent: ".
+		// "", which HTTP/2 and HTTP/3 drop and HTTP/1.1 writes as
+		// "User-Agent: ". A caller's empty User-Agent goes the same way.
+		// HTTP3Transport.RoundTrip sends the headers it is given, so HTTP/3
+		// gets no User-Agent back and is laid out as HTTP/2 is.
 		tlsOnly := true
 		bare := func() *Request {
 			return &Request{Method: "GET", TLSOnly: &tlsOnly, Headers: layoutHeaders("cors", "empty",
 				map[string][]string{"Accept": {"*/*"}, "Referer": {layoutPage}, "X-Foo": {"1"}})}
 		}
+		emptyUA := func() *Request {
+			return &Request{Method: "GET", Headers: layoutHeaders("cors", "empty",
+				map[string][]string{"User-Agent": {""}, "Referer": {layoutPage}})}
+		}
+		bareWant := []string{"sec-fetch-dest", "x-foo", "accept", "referer", "sec-fetch-site", "sec-fetch-mode"}
+		emptyUAWant := layoutWant([]string{"sec-fetch-dest", "accept", "referer", "sec-fetch-site", "sec-fetch-mode"}, false)
 		// A POST with no body sends content-length: 0 on HTTP/2 and HTTP/1.1.
 		// The HTTP/3 writer sends none, and with a body it puts content-length
 		// after every other field.
@@ -270,8 +279,12 @@ func TestWebKitHeaderLayoutOnTheWire(t *testing.T) {
 			req         func() *Request
 			want        []string
 		}{
-			{"TLS-only, the caller's headers and no User-Agent", "h2", bare,
-				[]string{"sec-fetch-dest", "x-foo", "accept", "referer", "sec-fetch-site", "sec-fetch-mode"}},
+			{"TLS-only, the caller's headers and no User-Agent", "h2", bare, bareWant},
+			{"TLS-only, the caller's headers and no User-Agent", "h3", bare, bareWant},
+			{"a caller's empty User-Agent", "h2", emptyUA, emptyUAWant},
+			{"a caller's empty User-Agent", "h3", emptyUA, emptyUAWant},
+			{"a caller's empty User-Agent", "h1", emptyUA, layoutWant([]string{"sec-fetch-dest", "user-agent",
+				"accept", "referer", "sec-fetch-site", "sec-fetch-mode"}, false)},
 			{"TLS-only, the caller's headers and no User-Agent", "h1", bare,
 				[]string{"accept", "sec-fetch-site", "sec-fetch-mode", "user-agent", "referer", "sec-fetch-dest",
 					"x-foo"}},

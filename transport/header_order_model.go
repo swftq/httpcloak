@@ -15,9 +15,9 @@ import (
 // fingerprint.Preset.CFNetworkHeaderOrder drops them. An empty User-Agent,
 // which TLS-only mode sets to keep the encoders' default out and a caller can
 // set too, is left out on HTTP/2 and HTTP/3, whose encoders drop it; HTTP/1.1
-// writes it as "User-Agent: ". On HTTP/3 that keeps it off the wire only if
-// HTTP3Transport.RoundTrip does not first write the preset's User-Agent over
-// it; if it does, that User-Agent goes out after every name the order places.
+// writes it as "User-Agent: ". HTTP3Transport.RoundTrip sends the headers it
+// is given and writes no User-Agent of the preset's over it, so HTTP/3 is laid
+// out as HTTP/2 is.
 func requestHeaderNames(header http.Header, userHeaders map[string][]string, protocol string) []string {
 	dropUA := protocol != "h1" && userAgentValue(header, userHeaders) == ""
 	names := make([]string, 0, len(header)+len(userHeaders))
