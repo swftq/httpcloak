@@ -3145,10 +3145,13 @@ func stripH1Priority(httpReq *http.Request, req *Request, preset *fingerprint.Pr
 // redirect hop carries), the bindings' fetch_mode and the caller's own. Each
 // has already shaped the request in applyPresetHeaders, through the sniff,
 // the priority table and the header-order lookup, so a fetch() keeps its
-// Accept, its priority and its header order. The order list may still name
-// the removed headers; the HTTP/1.1 and HTTP/2 writers send only the names the
-// map holds. HTTP3Transport.RoundTrip still fills in each preset header the map
-// lacks or holds empty, which puts a preset's client hints back on HTTP/3.
+// Accept and its priority. A listed order keeps its place for every header
+// that is left; the order list may still name the removed headers, and each
+// protocol's writer sends only the names the map holds. A preset on the
+// cfnetwork model lays a request other than a navigation to a URL that is not
+// trustworthy out without them in the first place, as Safari does
+// (cfnetworkHeaderNames). It does not do so for the later hop's rule, which
+// reaches only a custom preset that puts client hints on that model.
 //
 // ExactHeaders and TLS-only requests are left alone, since the caller composes
 // the header set in both, and so is a preset with no Sec-Fetch-* in its emit
@@ -3156,10 +3159,8 @@ func stripH1Priority(httpReq *http.Request, req *Request, preset *fingerprint.Pr
 // carries http://, so on HTTP/2 and HTTP/3 only the later hop's rule has
 // anything to take off.
 func stripUntrustworthyMetadata(httpReq *http.Request, req *Request, wire *presetWireHeaders, tlsOnly bool) {
-	if len(req.ExactHeaders) > 0 || tlsOnly || !wire.sendsSecFetch || httpReq.URL == nil {
-		return
-	}
-	if !site.PotentiallyTrustworthy(httpReq.URL) {
+	exact := len(req.ExactHeaders) > 0
+	if stripsUntrustworthyMetadata(httpReq.URL, wire, tlsOnly, exact) {
 		for key := range httpReq.Header {
 			if isSecFetchHeader(key) || isClientHintHeader(key) {
 				delete(httpReq.Header, key)
@@ -3167,7 +3168,7 @@ func stripUntrustworthyMetadata(httpReq *http.Request, req *Request, wire *prese
 		}
 		return
 	}
-	if !req.AfterUntrustworthyHop || !wire.sendsClientHints {
+	if !req.AfterUntrustworthyHop || !wire.sendsClientHints || exact || tlsOnly || !wire.sendsSecFetch {
 		return
 	}
 	// The merge has run, so this is the mode the request goes out with. An
@@ -3181,6 +3182,14 @@ func stripUntrustworthyMetadata(httpReq *http.Request, req *Request, wire *prese
 			delete(httpReq.Header, key)
 		}
 	}
+}
+
+// stripsUntrustworthyMetadata reports whether stripUntrustworthyMetadata takes
+// the Sec-Fetch-* and sec-ch-* headers off a request to u: one that is neither
+// an exact-headers nor a TLS-only request, on a preset whose emit set has
+// Sec-Fetch-*, to a URL that is not potentially trustworthy.
+func stripsUntrustworthyMetadata(u *url.URL, wire *presetWireHeaders, tlsOnly, exact bool) bool {
+	return !exact && !tlsOnly && wire.sendsSecFetch && u != nil && !site.PotentiallyTrustworthy(u)
 }
 
 // wireHeaderPair is one preset header ready to write: the key is already in
@@ -3458,9 +3467,11 @@ func applyPresetHeaders(httpReq *http.Request, wire *presetWireHeaders, customHe
 	// preset on that model gets its order from the names this request will
 	// carry once the caller's headers merge, as this protocol's writer sends
 	// them. Anything that adds or removes a header has to do it before this
-	// point, or the request is laid out as the set it no longer is.
+	// point, or the request is laid out as the set it no longer is. The one
+	// removal after it, stripUntrustworthyMetadata's, is taken into account
+	// here; see cfnetworkHeaderNames.
 	if preset.H2HeaderOrderModel() == fingerprint.HeaderOrderModelCFNetwork {
-		presetOrder = preset.CFNetworkHeaderOrder(requestHeaderNames(httpReq.Header, userHeaders, protocol),
+		presetOrder = preset.CFNetworkHeaderOrder(cfnetworkHeaderNames(httpReq, wire, userHeaders, protocol, tlsOnly),
 			bodyHeader(httpReq, userHeaders, protocol))
 	}
 	httpReq.Header[http.HeaderOrderKey] = CompleteHeaderOrder(customHeaderOrder, presetOrder, httpReq.Header, userHeaders)

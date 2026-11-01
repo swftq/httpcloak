@@ -1,6 +1,8 @@
 package transport
 
 import (
+	"cmp"
+	"slices"
 	"strings"
 
 	http "github.com/sardanioss/http"
@@ -33,6 +35,39 @@ func requestHeaderNames(header http.Header, userHeaders map[string][]string, pro
 		}
 	}
 	return names
+}
+
+// cfnetworkHeaderNames is requestHeaderNames for a preset on the cfnetwork
+// model, minus the headers stripUntrustworthyMetadata will take off a request
+// that is not a navigation.
+//
+// Over plain HTTP to a host that is not loopback no Sec-Fetch-* or sec-ch-*
+// header goes out, and Safari never adds one there, so its table holds fewer
+// names and lays them out another way. Safari 26.3 sent all 13 of its fetch()
+// POSTs to a LAN address over plain HTTP in the order the cfnetwork layout
+// gives the names they carried (run-20261031-234946 h1.log:7460-7475):
+// Content-Length after Cache-Control, where the same POST to localhost, laid
+// out with the three Sec-Fetch-* among its names, has it between Sec-Fetch-Site
+// and Sec-Fetch-Mode (h1.log:15-33). Its favicon there did the same
+// (h1.log:7494). Its one navigation there did not: it went out User-Agent,
+// Upgrade-Insecure-Requests, Accept (h1.log:7450-7459), the order those three
+// take beside the three Sec-Fetch-* with the three taken out, where the layout
+// of the three alone puts Upgrade-Insecure-Requests first. So a navigation
+// keeps every name here, and loses the stripped ones after the layout. Only a
+// top-level navigation to such a host was captured; a frame's is taken to go
+// the same way.
+func cfnetworkHeaderNames(httpReq *http.Request, wire *presetWireHeaders, userHeaders map[string][]string, protocol string, tlsOnly bool) []string {
+	names := requestHeaderNames(httpReq.Header, userHeaders, protocol)
+	if !stripsUntrustworthyMetadata(httpReq.URL, wire, tlsOnly, false) {
+		return names
+	}
+	mode := cmp.Or(headerVal(userHeaders, "Sec-Fetch-Mode"), headerVal(httpReq.Header, "Sec-Fetch-Mode"))
+	if strings.EqualFold(mode, "navigate") {
+		return names
+	}
+	return slices.DeleteFunc(names, func(n string) bool {
+		return isSecFetchHeader(n) || isClientHintHeader(n)
+	})
 }
 
 // userAgentValue is the User-Agent a request goes out with: the caller's
