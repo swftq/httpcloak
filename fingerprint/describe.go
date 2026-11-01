@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"time"
 
 	tls "github.com/sardanioss/utls"
@@ -261,6 +262,11 @@ func flattenHTTP2(p *Preset) *HTTP2Spec {
 	}
 	policy := p.H2HPACKIndexingPolicy()
 	out.HPACKIndexingPolicy = &policy
+	// The overrides are deltas from the policy, so they are written only when
+	// the preset has some, and a preset without any describes as it did.
+	if m := p.H2HPACKRepresentation(); len(m) > 0 {
+		out.HPACKRepresentation = maps.Clone(m)
+	}
 	out.HPACKNeverIndex = append([]string(nil), p.H2HPACKNeverIndex()...)
 	priorityMode := p.H2StreamPriorityMode()
 	out.StreamPriorityMode = &priorityMode
