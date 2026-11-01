@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/sardanioss/httpcloak/fingerprint"
+	"github.com/sardanioss/httpcloak/internal/cookieorder"
 	"github.com/sardanioss/httpcloak/protocol"
 	"github.com/sardanioss/httpcloak/transport"
 	"golang.org/x/net/publicsuffix"
@@ -254,6 +255,9 @@ func NewSessionWithOptions(id string, config *protocol.SessionConfig, opts *Sess
 		}
 	}
 
+	// The jar sends cookies in the order of the preset's browser engine.
+	cookieOrder := cookieorder.Of(fingerprint.Get(presetName).UserAgent)
+
 	return &Session{
 		ID:                            id,
 		CreatedAt:                     time.Now(),
@@ -261,7 +265,7 @@ func NewSessionWithOptions(id string, config *protocol.SessionConfig, opts *Sess
 		RequestCount:                  0,
 		Config:                        config,
 		transport:                     t,
-		cookies:                       NewCookieJar(),
+		cookies:                       newCookieJar(cookieOrder),
 		cacheEntries:                  make(map[string]*cacheEntry),
 		conditionalCacheEnabled:       !config.WithoutConditionalCache,
 		clientHints:                   make(map[string]map[string]bool),
@@ -886,6 +890,7 @@ func (s *Session) extractCookies(headers map[string][]string, requestURL string)
 
 	requestHost := extractHost(requestURL)
 	requestSecure := isSecureURL(requestURL)
+	var stored []*CookieData
 
 	// Each Set-Cookie header is now a separate element in the slice
 	for _, line := range setCookies {
@@ -996,8 +1001,12 @@ func (s *Session) extractCookies(headers map[string][]string, requestURL string)
 		}
 
 		// Use CookieJar to store with proper domain scoping
-		s.cookies.Set(requestHost, cookie, requestSecure)
+		stored = append(stored, cookie)
 	}
+
+	// One response's cookies are one store: WebKit presets send them by
+	// name, the others in Set-Cookie order.
+	s.cookies.setAll(requestHost, stored, requestSecure)
 }
 
 // splitBySemicolon splits a string by semicolon

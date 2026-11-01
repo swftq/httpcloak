@@ -314,7 +314,7 @@ func NewClient(presetName string, opts ...Option) *Client {
 	// Auto-enable cookies when retry is enabled
 	// (required for handling cookie challenges from bot protection)
 	if config.RetryEnabled {
-		client.cookies = NewCookieJar()
+		client.cookies = newCookieJarFor(preset)
 	}
 
 	return client
@@ -330,7 +330,7 @@ func NewSession(presetName string, opts ...Option) *Client {
 	opts = append(defaultOpts, opts...)
 
 	client := NewClient(presetName, opts...)
-	client.cookies = NewCookieJar()
+	client.cookies = newCookieJarFor(client.preset)
 	return client
 }
 
@@ -351,6 +351,10 @@ func (c *Client) SetPreset(presetName string) {
 	}
 	c.preset = preset
 	c.poolManager.SetPreset(preset)
+	// The jar's Cookie header order follows the browser too.
+	if c.cookies != nil {
+		c.cookies.setOrder(preset)
+	}
 
 	if c.h1Transport != nil {
 		c.h1Transport.SetPreset(preset)
@@ -399,7 +403,7 @@ func (c *Client) SetBearerAuth(token string) {
 // EnableCookies enables cookie jar for session persistence
 func (c *Client) EnableCookies() {
 	if c.cookies == nil {
-		c.cookies = NewCookieJar()
+		c.cookies = newCookieJarFor(c.preset)
 	}
 }
 

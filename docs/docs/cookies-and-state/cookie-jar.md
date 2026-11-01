@@ -19,7 +19,14 @@ When a response comes back with `Set-Cookie` headers, httpcloak parses each one 
 - `httpOnly`
 - `sameSite`
 
-The jar also records the creation time of each cookie. When it builds a `Cookie` header, longer paths and older creation timestamps come first, which is the RFC 6265 sort order real browsers use.
+The jar also records when it first stored each cookie and when it last stored it. When it builds a `Cookie` header, it lists the cookies in the order the preset's browser does. Longer paths go first on every preset, and after that:
+
+- **Chrome, Firefox and the other presets** send the earliest created cookie first, which is RFC 6265's order, and the cookies one response set in `Set-Cookie` order. A cookie set again while it is still live keeps its place, as RFC 6265 asks and Firefox 159 does. On the Chrome presets it keeps its place only when its value is unchanged: with a new value it goes behind the cookies stored before it, as Chrome 156 does.
+- **Safari and Chrome on iOS**, which runs on WebKit, send the most recently stored cookie first, and the cookies one response set in name order, as Safari 26.3 does. A cookie set again moves to the front. Every cookie in that capture had `Path=/`, so for these presets the longer-paths-first rule is RFC 6265's and was not captured.
+
+The order follows the browser engine of the preset's User-Agent, so a custom preset gets the order of the browser it presents. Each store gets a time later than the jar's last one, so the order doesn't depend on how fine the system clock is, and it stays the same from one request to the next. The lower-level `client.Client` orders its own jar the same way, and switches the order with `SetPreset`.
+
+Loading a saved session with `LoadSession` moves the jar's clock past the times it loads, so a cookie stored right after the load is newer than every loaded one, even within one tick of the system clock. The clock moves at most a second past the system clock for this: a loaded time further ahead, from a file written on a machine whose clock ran ahead, leaves the clock where it is, and its cookie counts as newer than the cookies stored until the system clock reaches that time.
 
 ## When the jar sends what
 
@@ -131,7 +138,7 @@ The session exposes the jar's contents through five methods:
 
 - `GetCookies()` returns the full list of `CookieInfo` records with domain, path, expiry, and flags. The same shape across Go, Python, Node, and .NET (`List[Cookie]` / `Cookie[]` / `List<Cookie>`).
 - `GetCookiesDetailed()` is an alias of `GetCookies` kept for migration symmetry. v1.6.5 finished the deprecation cycle that started in v1.6.1; the older flat name-to-value dict is gone, so both names return the same Cookie-object list.
-- `SetCookie(...)` adds or updates a cookie programmatically.
+- `SetCookie(...)` adds or updates a cookie programmatically. Each call is a store of its own, so on the Safari and iOS presets the cookie set last goes first. Seed several cookies oldest first, or restore a saved jar with `LoadSession`.
 - `DeleteCookie(name, domain)` removes one (pass an empty domain to wipe matches across every domain).
 - `ClearCookies()` empties the jar.
 
