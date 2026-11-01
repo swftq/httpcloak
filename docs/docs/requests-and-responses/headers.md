@@ -37,7 +37,7 @@ Different presets ship different defaults. Firefox skips `sec-ch-ua-*` entirely,
 
 The lib also auto-rewrites the `sec-fetch-*` cluster based on the kind of request you're firing. POST/PUT/PATCH and most XHR-shaped GETs flip from navigation mode (`navigate`/`document`/`?1`) to CORS mode (`cors`/`empty`/cross-site, no `sec-fetch-user`). The browser does the same rewrite, so an API call doesn't go out with navigation-style headers attached.
 
-Over plain `http://`, `accept-encoding` drops to `gzip, deflate` where the browser drops it. Chrome and Firefox keep their full list only for a loopback host (`localhost`, a name under `.localhost`, `127.0.0.0/8` or `::1`). Safari, and every browser on iOS, sends `gzip, deflate` on every plain-HTTP request, localhost included. HTTPS always carries the preset's own list. A custom preset can change the rule with [`headers.full_encoding_over_http`](../reference/json-preset-spec.md#headers-object).
+Over plain `http://`, `accept-encoding` drops to `gzip, deflate` where the browser drops it. Chrome and Firefox keep their full list only for a loopback host (`localhost`, a name under `.localhost`, `127.0.0.0/8` or `::1`). Safari, and every browser on iOS, sends `gzip, deflate` on every plain-HTTP request, localhost included. HTTPS always carries the preset's own list. A custom preset can change the rule with [`headers.full_encoding_over_http`](../reference/json-preset-spec.md#headers-object). Safari, and every browser on iOS, also adds `upgrade-insecure-requests: 1` to a plain-HTTP navigation, of a page or an iframe, and sends it on no https request; Chrome and Firefox send it on every navigation, and so do their presets, except that the `firefox-133` presets send none through a session.
 
 ## Setting custom headers
 
