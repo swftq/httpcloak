@@ -299,7 +299,7 @@ How header compression and stream priorities behave on the wire.
 | `disable_cookie_split` | bool | When true, the `Cookie:` header is sent as one line instead of split into multiple HPACK entries. |
 | `hpack_never_index` | string[] | Lowercase header names that must be sent without HPACK indexing. |
 
-`hpack_header_order` orders HTTP/1.1 headers too. Name `connection` in it to put HTTP/1.1's `Connection` header at that place, as the Firefox presets do after `origin`. Leave it out and `Connection` goes right after `Host`, where Chrome sends it. HTTP/2 and HTTP/3 carry no `Connection`, so the entry changes nothing there.
+`hpack_header_order` orders HTTP/1.1 headers too. Name `connection` in it to put HTTP/1.1's `Connection` header at that place, as the Firefox presets do after `origin` and the Safari 26 presets do last. Leave it out and `Connection` goes right after `Host`, where Chrome sends it. HTTP/2 and HTTP/3 carry no `Connection`, so the entry changes nothing there.
 
 Headers the order does not name, usually ones the caller set, go after everything it does name, sorted. An entry of `"*"` puts them at that place instead:
 
@@ -307,7 +307,7 @@ Headers the order does not name, usually ones the caller set, go after everythin
 "hpack_header_order": ["user-agent", "accept", "accept-language", "accept-encoding", "content-type", "*", "content-length", "..."]
 ```
 
-That is where Firefox sends the headers a page sets on a `fetch()` or an `XMLHttpRequest`, and the Firefox presets use it. The `"*"` itself never goes on the wire. A `te` entry places the header only on HTTP/2: the transport sends a preset's `TE` there and nowhere else, as Firefox does.
+That is where Firefox sends the headers a page sets on a `fetch()` or an `XMLHttpRequest`, and the Firefox presets use it. The Safari 26 presets put it right before `accept-language`, since on every request other than a WebSocket handshake Safari 26 sent nothing after that but `priority`, `accept-encoding`, `cookie` and `connection`. The `"*"` itself never goes on the wire. A `te` entry places the header only on HTTP/2: the transport sends a preset's `TE` there and nowhere else, as Firefox does.
 
 ### `hpack_header_order_subresource`
 

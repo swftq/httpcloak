@@ -206,6 +206,7 @@ Safari macOS:
 - Pseudo order `m,s,p,a` on 18, `m,s,a,p` on 26.
 - `NO_RFC7540_PRIORITIES=1`. Safari opts out of stream priorities. Safari 26 also puts no priority fields on HEADERS, and sends an RFC 9218 `priority` header on every request, HTTP/1.1 included.
 - No `sec-ch-ua` (Safari doesn't ship Client Hints). Header order is shorter than Chrome's. Safari 26 sends no `Sec-Fetch-User`.
+- On HTTP/1.1, Safari 26 ends every request but a WebSocket handshake with `Accept-Language`, `Priority`, `Accept-Encoding`, the `Cookie` when there is one, and `Connection`, with a body's headers and any of your own ahead of `Accept-Language`. The 26 presets do the same, and so does Chrome on iOS from 148 on; through `client.Client`, headers added by `Auth` or a pre-request hook still go after `Connection`. The 18 presets keep `Connection` right after `Host`, where Chrome sends it.
 - Default Akamai on 18: `2:0;4:2097152;3:100;5:16384;9:1|10485760|0|m,s,p,a`. On 26: `2:0;3:100;4:2097152;9:1|10420225|0|m,s,a,p`, the same as `chrome-155-ios`, since Chrome on iOS runs on WebKit.
 
 ---

@@ -67,13 +67,16 @@
         "referer",
         "sec-fetch-site",
         "sec-fetch-mode",
+        "content-type",
+        "content-length",
+        "transfer-encoding",
+        "origin",
+        "*",
         "accept-language",
         "priority",
         "accept-encoding",
         "cookie",
-        "content-type",
-        "content-length",
-        "origin"
+        "connection"
       ],
       "priority_table": {
         "document": {
