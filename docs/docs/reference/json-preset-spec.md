@@ -415,6 +415,12 @@ own carries seven or more and comes out in another order. A `fetch()` POST with
 `referer`, `sec-fetch-dest`, `cache-control`. A header you set goes where Safari
 puts a header of that name that a page set, ahead of the ones CFNetwork adds.
 
+Over plain `http://` to a host that isn't loopback, where no `sec-fetch-*` goes
+out, a request other than a navigation is laid out from the names it still
+carries. A navigation there is laid out with the three `sec-fetch-*` and loses
+them afterwards, which is how Safari 26.3 sent its one navigation to a LAN
+address.
+
 The Safari 26 presets and Chrome on iOS from 148 on use `"cfnetwork"`; every
 other preset uses `"list"`. Such a preset still needs `hpack_header_order`, which
 orders every request sent through `client.Client`. `Request.HeaderOrder` and

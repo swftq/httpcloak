@@ -552,7 +552,11 @@ type H2FingerprintConfig struct {
 	// 13 or 23 buckets. CFNetwork's own headers followed. That reproduces 12 of
 	// the 14 orders and 604 of the requests; the one navigation order before it
 	// reproduced 169, and no order per destination fits, because the plain
-	// fetch() GETs went out in the navigation order and the POSTs did not.
+	// fetch() GETs went out in the navigation order and the POSTs did not. Over
+	// plain HTTP to a host that isn't loopback, which gets no Sec-Fetch-*, the
+	// transport lays a request out without them, except a navigation, which
+	// keeps the order it has beside them, as Safari 26.3 sent its one
+	// navigation to a LAN address.
 	HeaderOrderModel string
 }
 

@@ -116,8 +116,14 @@ func TestUntrustworthyURLGetsNoSecHeaders(t *testing.T) {
 					// Everything else keeps the shape the removed headers gave it:
 					// the same names in the same order as to localhost, with the
 					// same values apart from Host and the plain-HTTP
-					// Accept-Encoding.
+					// Accept-Encoding. A preset on the cfnetwork model lays a
+					// request other than a navigation out from the names it
+					// carries there, as Safari 26.3 did (cfnetworkHeaderNames),
+					// so its order is the model's for those names.
 					want := slices.DeleteFunc(local.names(), isSecMetadataName)
+					if p := fingerprint.Get(name); p.H2HeaderOrderModel() == fingerprint.HeaderOrderModelCFNetwork && sh.name != "navigation" {
+						want = cfnetworkWireOrder(p, want)
+					}
 					if got := head.names(); !slices.Equal(got, want) {
 						t.Errorf("%s: header order\n got %v\nwant %v", what, got, want)
 						continue
@@ -233,6 +239,27 @@ func TestUntrustworthyURLStripExemptions(t *testing.T) {
 	if v, _ := head.value("sec-ch-ua"); v != chUA {
 		t.Errorf("preset without Sec-Fetch-*: sec-ch-ua %q, want its own %q", v, chUA)
 	}
+}
+
+// cfnetworkWireOrder is the HTTP/1.1 order a preset on the cfnetwork model
+// gives a request that carries names, lowercased: Host first, where the writer
+// puts it, then the layout of the rest, with Content-Length framing the body
+// when it is among them.
+func cfnetworkWireOrder(p *fingerprint.Preset, names []string) []string {
+	body := ""
+	if slices.Contains(names, "content-length") {
+		body = "content-length"
+	}
+	var out []string
+	if slices.Contains(names, "host") {
+		out = append(out, "host")
+	}
+	for _, n := range p.CFNetworkHeaderOrder(names, body) {
+		if slices.Contains(names, n) {
+			out = append(out, n)
+		}
+	}
+	return out
 }
 
 // presetNames is the set of lowercase header names in the preset's emit set.

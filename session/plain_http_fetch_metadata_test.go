@@ -100,7 +100,10 @@ func sendsClientHints(p *fingerprint.Preset) bool {
 
 // Every preset, every request shape: nothing from either family reaches a LAN
 // name or address, and the rest of the request is the one localhost gets, in
-// the same order. Loopback hosts keep both, as before.
+// the same order. Loopback hosts keep both, as before. A preset on the
+// cfnetwork model lays a request other than a navigation out from the names
+// it carries there, as Safari 26.3 did (TestSessionWebKit26PlainHTTPLayout),
+// so its order is the model's for those names.
 func TestSessionPlainHTTPFetchMetadata(t *testing.T) {
 	srv := startEncodingCapture(t)
 	shapes := []struct {
@@ -164,6 +167,9 @@ func TestSessionPlainHTTPFetchMetadata(t *testing.T) {
 					continue
 				}
 				want := slices.DeleteFunc(local.names(), secMetadataName)
+				if p.H2HeaderOrderModel() == fingerprint.HeaderOrderModelCFNetwork && sh.name != "navigation" {
+					want = cfnetworkWireOrder(p, want)
+				}
 				if got := req.names(); !slices.Equal(got, want) {
 					t.Errorf("%s %s to http://%s: header order\n got %v\nwant %v", name, sh.name, h.host, got, want)
 				}

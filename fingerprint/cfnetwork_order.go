@@ -69,7 +69,11 @@ var cfnetworkTail = []string{"accept-language", "priority", "accept-encoding", "
 // host.
 //
 // The order depends on every name the request carries, so it has to be
-// computed after the last header is added or removed.
+// computed after the last header is added or removed. The one exception the
+// captures show is a navigation to a plain-HTTP host that isn't loopback:
+// Safari 26.3 sent its one such navigation in the order its names take beside
+// the three Sec-Fetch-* it did not send, and the transport lays such a
+// navigation out that way (cfnetworkHeaderNames).
 func (p *Preset) CFNetworkHeaderOrder(names []string, bodyHeader string) []string {
 	own := make(map[string]bool, len(names))
 	for _, n := range names {
