@@ -59,6 +59,37 @@ func TestSafari26Presets(t *testing.T) {
 				t.Errorf("%s: navigation sends %s; Safari 26 sent neither over HTTPS", c.name, hp.Key)
 			}
 		}
+		if got := p.H2HeaderOrderModel(); got != HeaderOrderModelCFNetwork {
+			t.Errorf("%s: header order model %q, want %q", c.name, got, HeaderOrderModelCFNetwork)
+		}
+	}
+
+	// Safari 26 orders a request's headers by the CoreFoundation dictionary
+	// that holds them, and so does Chrome on iOS from 148 on, which runs on
+	// the same WebKit; that part is inferred, since Chrome on iOS was not
+	// captured. Every other preset keeps its listed orders, and describes as
+	// it did.
+	model := []string{"safari-26", "safari-26-ios", "chrome-148-ios", "chrome-150-ios", "chrome-151-ios",
+		"chrome-152-ios", "chrome-155-ios"}
+	for _, name := range Available() {
+		p := Get(name)
+		want := HeaderOrderModelList
+		if slices.Contains(model, p.Name) {
+			want = HeaderOrderModelCFNetwork
+		}
+		if got := p.H2HeaderOrderModel(); got != want {
+			t.Errorf("%s: header order model %q, want %q", name, got, want)
+		}
+		desc, err := Describe(name)
+		if err != nil {
+			t.Fatalf("%s: describe: %v", name, err)
+		}
+		if has := strings.Contains(desc, `"header_order_model": "cfnetwork"`); has != (want == HeaderOrderModelCFNetwork) {
+			t.Errorf("%s: describe writes header_order_model cfnetwork: %v, want %v", name, has, !has)
+		}
+		if want == HeaderOrderModelList && strings.Contains(desc, "header_order_model") {
+			t.Errorf("%s: describe writes header_order_model for a preset that does not set it", name)
+		}
 	}
 }
 
@@ -72,15 +103,19 @@ func TestSafari26Presets(t *testing.T) {
 // name that turned up most, right before it on 259 of the 288. Chrome on iOS
 // runs on the same WebKit, so its presets from 148 on carry the same table.
 //
-// Every order a WebKit 26 preset hands the transport must therefore end that
-// way, whatever the destination, and name connection once. Nothing may land
-// after it either, so the body's headers, Transfer-Encoding and the marker for
-// the caller's own headers come before accept-language. A redirect hop gets
-// the early-referer table when a preset has one and the usual order otherwise,
-// so H2HeaderOrderFor and the two optional tables cover every order
-// HeaderOrderFor returns. Those two must at least end accept-encoding, cookie,
-// connection: the one redirect hop Safari was seen sending, a WebSocket
-// handshake's after a 302, moved Accept-Language and Priority into the middle.
+// These presets' session and transport requests take their order from
+// CFNetworkHeaderOrder, whose tail is that one; the transport and session
+// HTTP/1.1 tail tests check it on the wire. Their tables still order every
+// client.Client request, and describe and h2build read them, so every order
+// the tables give must end that way too, whatever the destination, and name
+// connection once. Nothing may land after it either, so the body's headers,
+// Transfer-Encoding and the marker for the caller's own headers come before
+// accept-language. A redirect hop gets the early-referer table when a preset
+// has one and the usual order otherwise, so H2HeaderOrderFor and the two
+// optional tables cover every order HeaderOrderFor returns. Those two must at
+// least end accept-encoding, cookie, connection: the one redirect hop Safari
+// was seen sending, a WebSocket handshake's after a 302, moved Accept-Language
+// and Priority into the middle.
 func TestWebKit26OrdersEndLikeSafari(t *testing.T) {
 	tail := []string{"accept-language", "priority", "accept-encoding", "cookie", "connection"}
 	early := []string{"content-type", "content-length", "transfer-encoding", "origin", OtherHeaders}

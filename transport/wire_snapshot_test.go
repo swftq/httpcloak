@@ -1164,13 +1164,7 @@ func (r *lineReader) n(n int) ([]byte, error) {
 // stream frames, the types of its other unidirectional streams, and the QPACK
 // field lines of each request.
 func captureH3(t *testing.T, name string, cert tls.Certificate) string {
-	ln, err := quic.ListenAddr("127.0.0.1:0", &utls.Config{
-		Certificates: []utls.Certificate{{Certificate: cert.Certificate, PrivateKey: cert.PrivateKey}},
-		NextProtos:   []string{"h3"}},
-		&quic.Config{MaxIdleTimeout: 20 * time.Second})
-	if err != nil {
-		t.Fatal(err)
-	}
+	ln := listenBareH3(t, cert)
 	defer ln.Close()
 	port := portOf(ln.Addr())
 
@@ -1181,97 +1175,70 @@ func captureH3(t *testing.T, name string, cert tls.Certificate) string {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	go func() {
-		for {
-			conn, err := ln.Accept(ctx)
-			if err != nil {
-				return
+	serveBareH3(ctx, ln, func() {
+		mu.Lock()
+		conns++
+		mu.Unlock()
+	}, func(s *quic.ReceiveStream) {
+		r := &quicReader{r: s}
+		typ := r.varint()
+		if r.err != nil {
+			return
+		}
+		if typ != 0x00 {
+			label := fmt.Sprintf("%#x", typ)
+			if typ >= 0x21 && (typ-0x21)%0x1f == 0 {
+				label = "GREASE"
 			}
 			mu.Lock()
-			conns++
+			uni = append(uni, label)
 			mu.Unlock()
-			if s, err := conn.OpenUniStream(); err == nil {
-				s.Write([]byte{0x00, 0x04, 0x00}) // control stream, empty SETTINGS
-			}
-			go func() {
-				for {
-					s, err := conn.AcceptUniStream(ctx)
-					if err != nil {
-						return
-					}
-					go func() {
-						r := &quicReader{r: s}
-						typ := r.varint()
-						if r.err != nil {
-							return
-						}
-						if typ != 0x00 {
-							label := fmt.Sprintf("%#x", typ)
-							if typ >= 0x21 && (typ-0x21)%0x1f == 0 {
-								label = "GREASE"
-							}
-							mu.Lock()
-							uni = append(uni, label)
-							mu.Unlock()
-							io.Copy(io.Discard, s)
-							return
-						}
-						for {
-							ft := r.varint()
-							p := r.take(int(r.varint()))
-							if r.err != nil {
-								return
-							}
-							line := renderH3ControlFrame(ft, p)
-							mu.Lock()
-							control = append(control, line)
-							mu.Unlock()
-						}
-					}()
-				}
-			}()
-			go func() {
-				for {
-					s, err := conn.AcceptStream(ctx)
-					if err != nil {
-						return
-					}
-					go func() {
-						defer s.Close()
-						r := &quicReader{r: s}
-						var lines []string
-						for {
-							ft := r.varint()
-							if r.err != nil {
-								break
-							}
-							p := r.take(int(r.varint()))
-							if r.err != nil {
-								break
-							}
-							switch {
-							case ft == 0x01:
-								lines = append(lines, "HEADERS")
-								for _, l := range renderQPACK(p, port) {
-									lines = append(lines, "  "+l)
-								}
-							case ft == 0x00:
-								lines = append(lines, fmt.Sprintf("DATA len=%d", len(p)))
-							case ft >= 0x21 && (ft-0x21)%0x1f == 0:
-								lines = append(lines, "GREASE frame")
-							default:
-								lines = append(lines, fmt.Sprintf("FRAME %#x len=%d", ft, len(p)))
-							}
-						}
-						mu.Lock()
-						requests[uint64(s.StreamID())] = lines
-						mu.Unlock()
-						s.Write([]byte{0x01, 0x03, 0x00, 0x00, 0xd9}) // HEADERS :status 200
-					}()
-				}
-			}()
+			io.Copy(io.Discard, s)
+			return
 		}
-	}()
+		for {
+			ft := r.varint()
+			p := r.take(int(r.varint()))
+			if r.err != nil {
+				return
+			}
+			line := renderH3ControlFrame(ft, p)
+			mu.Lock()
+			control = append(control, line)
+			mu.Unlock()
+		}
+	}, func(s *quic.Stream) {
+		defer s.Close()
+		r := &quicReader{r: s}
+		var lines []string
+		for {
+			ft := r.varint()
+			if r.err != nil {
+				break
+			}
+			p := r.take(int(r.varint()))
+			if r.err != nil {
+				break
+			}
+			switch {
+			case ft == 0x01:
+				lines = append(lines, "HEADERS")
+				for _, l := range renderQPACK(p, port) {
+					lines = append(lines, "  "+l)
+				}
+			case ft == 0x00:
+				lines = append(lines, fmt.Sprintf("DATA len=%d", len(p)))
+			case ft >= 0x21 && (ft-0x21)%0x1f == 0:
+				lines = append(lines, "GREASE frame")
+			default:
+				lines = append(lines, fmt.Sprintf("FRAME %#x len=%d", ft, len(p)))
+			}
+		}
+		mu.Lock()
+		requests[uint64(s.StreamID())] = lines
+		mu.Unlock()
+		s.Write([]byte{0x01, 0x03, 0x00, 0x00, 0xd9}) // HEADERS :status 200
+	})
 
 	tr := wireTransport(name, ProtocolHTTP3)
 	defer tr.Close()
@@ -1319,6 +1286,62 @@ func captureH3(t *testing.T, name string, cert tls.Certificate) string {
 		}
 	}
 	return out.String()
+}
+
+// listenBareH3 opens the QUIC listener of a bare HTTP/3 server on a loopback
+// port, with cert, for serveBareH3 to serve. They are two calls so that the
+// caller has the listener's address before any stream reaches its handlers.
+func listenBareH3(t *testing.T, cert tls.Certificate) *quic.Listener {
+	t.Helper()
+	ln, err := quic.ListenAddr("127.0.0.1:0", &utls.Config{
+		Certificates: []utls.Certificate{{Certificate: cert.Certificate, PrivateKey: cert.PrivateKey}},
+		NextProtos:   []string{"h3"}},
+		&quic.Config{MaxIdleTimeout: 20 * time.Second})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return ln
+}
+
+// serveBareH3 serves ln as an HTTP/3 server that speaks just enough HTTP/3 to
+// answer, until ctx is done. For each connection it accepts it calls accepted,
+// if set, and opens the control stream with an empty SETTINGS; then it hands
+// every unidirectional stream the client opens to uni and every request stream
+// to request, each on a goroutine of its own.
+func serveBareH3(ctx context.Context, ln *quic.Listener, accepted func(),
+	uni func(*quic.ReceiveStream), request func(*quic.Stream)) {
+	go func() {
+		for {
+			conn, err := ln.Accept(ctx)
+			if err != nil {
+				return
+			}
+			if accepted != nil {
+				accepted()
+			}
+			if s, err := conn.OpenUniStream(); err == nil {
+				s.Write([]byte{0x00, 0x04, 0x00}) // control stream, empty SETTINGS
+			}
+			go func() {
+				for {
+					s, err := conn.AcceptUniStream(ctx)
+					if err != nil {
+						return
+					}
+					go uni(s)
+				}
+			}()
+			go func() {
+				for {
+					s, err := conn.AcceptStream(ctx)
+					if err != nil {
+						return
+					}
+					go request(s)
+				}
+			}()
+		}
+	}()
 }
 
 func renderH3ControlFrame(ft uint64, p []byte) string {

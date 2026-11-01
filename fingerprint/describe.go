@@ -322,6 +322,13 @@ func flattenHTTP2(p *Preset) *HTTP2Spec {
 	if po := p.H2PseudoHeaderOrder(); po != nil {
 		out.PseudoOrder = append([]string(nil), po...)
 	}
+	// Only when the preset sets it, like priority_always_urgency below: a
+	// preset ordered by its lists, which is every one but WebKit 26's,
+	// describes as it did before the key existed.
+	if p.H2Config != nil && p.H2Config.HeaderOrderModel != "" {
+		model := p.H2Config.HeaderOrderModel
+		out.HeaderOrderModel = &model
+	}
 
 	// PriorityTable: emit the EFFECTIVE table (explicit override OR
 	// inherited package default). This means describe_preset always shows

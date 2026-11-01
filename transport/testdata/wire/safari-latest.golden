@@ -111,13 +111,13 @@ HEADERS stream=7 flags=0x4
   indexed 7                                                    :scheme: https
   indexed 70                                                   :authority: 127.0.0.1:PORT
   without-indexing name=4 value-huffman=false                  :path: /c
-  incremental name=69 value-huffman=true                       sec-fetch-dest: empty
-  indexed 69                                                   user-agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.3 Safari/605.1.15
   incremental name=19 value-huffman=false                      accept: */*
+  incremental name=31 value-huffman=true                       content-type: application/json
   incremental name=68 value-huffman=true                       sec-fetch-site: cross-site
   incremental name=68 value-huffman=true                       sec-fetch-mode: cors
-  incremental name=31 value-huffman=true                       content-type: application/json
+  indexed 72                                                   user-agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.3 Safari/605.1.15
   without-indexing name=28 value-huffman=false                 content-length: 7
+  incremental name=73 value-huffman=true                       sec-fetch-dest: empty
   indexed 69                                                   accept-language: en-US,en;q=0.9
   incremental name=68 value-huffman=true                       priority: u=3, i
   indexed 68                                                   accept-encoding: gzip, deflate, br, zstd
@@ -163,13 +163,13 @@ Connection: keep-alive
 --- request on connection 1
 POST /c HTTP/1.1
 Host: 127.0.0.1:PORT
-Sec-Fetch-Dest: empty
-User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.3 Safari/605.1.15
 Accept: */*
+Content-Type: application/json
 Sec-Fetch-Site: cross-site
 Sec-Fetch-Mode: cors
-Content-Type: application/json
+User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.3 Safari/605.1.15
 Content-Length: 7
+Sec-Fetch-Dest: empty
 Accept-Language: en-US,en;q=0.9
 Priority: u=3, i
 Accept-Encoding: gzip, deflate, br, zstd
@@ -253,12 +253,12 @@ HEADERS
   indexed static=true 23
   literal name-ref static=true 0 never=false huffman=true "127.0.0.1:PORT"
   literal name-ref static=true 1 never=false huffman=true "/c"
-  literal name="sec-fetch-dest" name-huffman=true never=false huffman=true "empty"
-  literal name-ref static=true 95 never=false huffman=true "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.3 Safari/605.1.15"
   indexed static=true 29
+  indexed static=true 46
   literal name="sec-fetch-site" name-huffman=true never=false huffman=true "cross-site"
   literal name="sec-fetch-mode" name-huffman=true never=false huffman=true "cors"
-  indexed static=true 46
+  literal name-ref static=true 95 never=false huffman=true "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.3 Safari/605.1.15"
+  literal name="sec-fetch-dest" name-huffman=true never=false huffman=true "empty"
   literal name-ref static=true 72 never=false huffman=true "en-US,en;q=0.9"
   literal name="priority" name-huffman=true never=false huffman=true "u=3, i"
   literal name-ref static=true 31 never=false huffman=true "gzip, deflate, br, zstd"
@@ -368,7 +368,8 @@ DATA len=7
       },
       "priority_model": "table",
       "priority_over_http1": true,
-      "priority_always_urgency": true
+      "priority_always_urgency": true,
+      "header_order_model": "cfnetwork"
     },
     "http3": {
       "qpack_max_table_capacity": 16383,

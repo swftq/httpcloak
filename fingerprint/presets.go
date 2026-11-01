@@ -538,6 +538,22 @@ type H2FingerprintConfig struct {
 	// or a fetch(). Chromium leaves the default out, and
 	// PriorityHeaderFromResource follows Chromium.
 	PriorityAlwaysUrgency bool
+
+	// HeaderOrderModel says where a request's header order comes from.
+	// HeaderOrderModelList, the default, takes it from the orders above, by
+	// request shape (HeaderOrderFor). HeaderOrderModelCFNetwork computes it
+	// from the names the request carries (CFNetworkHeaderOrder), which is what
+	// Safari 26 does. Two captures of Safari 26.3, on macOS 26.3 and in the
+	// iOS 26.3.1 simulator, hold 608 page requests, WebSocket handshakes aside,
+	// whose header order was logged, in 13 sets of headers, sent in 14 orders.
+	// Each request sent the headers it carried itself in the iteration order of
+	// a CoreFoundation dictionary keyed by the lowercased name: CFString.c's
+	// __CFStrHashCharacters, in CFBasicHash.c's linear-probing table of 3, 7,
+	// 13 or 23 buckets. CFNetwork's own headers followed. That reproduces 12 of
+	// the 14 orders and 604 of the requests; the one navigation order before it
+	// reproduced 169, and no order per destination fits, because the plain
+	// fetch() GETs went out in the navigation order and the POSTs did not.
+	HeaderOrderModel string
 }
 
 // OtherHeaders, in a header order, marks the place for every header the order
@@ -552,6 +568,12 @@ const OtherHeaders = "*"
 const (
 	PriorityModelChromium = "chromium"
 	PriorityModelTable    = "table"
+)
+
+// Header order models, see H2FingerprintConfig.HeaderOrderModel.
+const (
+	HeaderOrderModelList      = "list"
+	HeaderOrderModelCFNetwork = "cfnetwork"
 )
 
 // ResourcePriority describes a single browser priority decision for one
@@ -1041,6 +1063,17 @@ func (p *Preset) H2PriorityModel() string {
 		return PriorityModelChromium
 	}
 	return PriorityModelTable
+}
+
+// H2HeaderOrderModel is the preset's HeaderOrderModel, or HeaderOrderModelList
+// when it does not set one. The transport computes the order of a request on a
+// HeaderOrderModelCFNetwork preset with CFNetworkHeaderOrder, and takes every
+// other preset's from HeaderOrderFor.
+func (p *Preset) H2HeaderOrderModel() string {
+	if p.H2Config != nil && p.H2Config.HeaderOrderModel != "" {
+		return p.H2Config.HeaderOrderModel
+	}
+	return HeaderOrderModelList
 }
 
 // SendsPriorityOverHTTP1 reports whether the preset's priority header goes out

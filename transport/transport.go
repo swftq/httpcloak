@@ -3394,10 +3394,18 @@ func applyPresetHeaders(httpReq *http.Request, wire *presetWireHeaders, customHe
 	// order of their own. The dest read here is the final one: the Sec-Fetch
 	// inference above has already run, and the priority table a few lines up
 	// reads the same field.
-	httpReq.Header[http.HeaderOrderKey] = CompleteHeaderOrder(
-		customHeaderOrder,
-		preset.HeaderOrderFor(httpReq.Header.Get("Sec-Fetch-Dest"), shape.redirectHop, shape.initiator == InitiatorXHR),
-		httpReq.Header, userHeaders)
+	presetOrder := preset.HeaderOrderFor(httpReq.Header.Get("Sec-Fetch-Dest"), shape.redirectHop, shape.initiator == InitiatorXHR)
+	// WebKit 26 has no order per request shape. Safari sends the headers a
+	// request carries in the order of the dictionary that holds them, so a
+	// preset on that model gets its order from the names this request will
+	// carry once the caller's headers merge, as this protocol's writer sends
+	// them. Anything that adds or removes a header has to do it before this
+	// point, or the request is laid out as the set it no longer is.
+	if preset.H2HeaderOrderModel() == fingerprint.HeaderOrderModelCFNetwork {
+		presetOrder = preset.CFNetworkHeaderOrder(requestHeaderNames(httpReq.Header, userHeaders, protocol),
+			bodyHeader(httpReq, userHeaders, protocol))
+	}
+	httpReq.Header[http.HeaderOrderKey] = CompleteHeaderOrder(customHeaderOrder, presetOrder, httpReq.Header, userHeaders)
 
 	// Set pseudo-header order: custom (Akamai) > preset H2Config > heuristic
 	if len(customPseudoOrder) > 0 {

@@ -77,7 +77,7 @@ func TestHeaderPipelineMatchesThePreviousOne(t *testing.T) {
 								}
 								old, cur := mk(), mk()
 								frozenApplyPresetHeaders(old, preset, order, nil, tlsOnly, proto, req.Headers, strip, exact)
-								changedSinceTheFreeze(old, preset, order, tlsOnly, proto, exact)
+								changedSinceTheFreeze(old, preset, order, tlsOnly, proto, req.Headers, exact)
 								frozenMergeCallerHeaders(old, req)
 								applyPresetHeaders(cur, tr.wireHeaders(preset), order, nil, tlsOnly, proto, req.Headers, strip, exact, requestShape{})
 								// The frozen merge canonicalises every name. HTTP/1.1
@@ -126,19 +126,32 @@ func TestHeaderPipelineMatchesThePreviousOne(t *testing.T) {
 //
 //   - A preset's TE goes out on HTTP/2 only. Firefox 159 adds te: trailers in
 //     its HTTP/2 encoder and sends no TE on HTTP/1.1 or HTTP/3.
+//   - A preset whose H2HeaderOrderModel is cfnetwork, Safari 26 and Chrome on
+//     iOS from 148 on, takes its order from the names the request carries
+//     (fingerprint.Preset.CFNetworkHeaderOrder) in place of the list
+//     HeaderOrderFor gives. The reference's order is rebuilt from that with
+//     the frozen completion, so CompleteHeaderOrder is still compared, and
+//     every other preset compares as it did.
 //   - A preset order can carry fingerprint.OtherHeaders, which takes the
 //     headers the order does not name, in place of the sorted tail at the end.
 //     The reference placed the marker as if it were a header name and sorted
-//     the rest after everything, so the rest moves to the marker.
+//     the rest after everything, so the rest moves to the marker. The model's
+//     orders carry no marker, so this step leaves them as they are.
 //
 // It runs before the caller's headers merge, where the pipeline makes the same
-// changes, and none of the shapes above sets a TE of its own.
-func changedSinceTheFreeze(req *http.Request, preset *fingerprint.Preset, explicit []string, tlsOnly bool, proto string, exact []fingerprint.HeaderPair) {
-	if exact != nil {
+// changes, in the pipeline's order, and works out the request's names the same
+// way: the caller's from userHeaders, and the ones proto's writer sends. None
+// of the shapes above sets a TE of its own.
+func changedSinceTheFreeze(req *http.Request, preset *fingerprint.Preset, explicit []string, tlsOnly bool, proto string, userHeaders map[string][]string, exact []fingerprint.HeaderPair) {
+	if len(exact) > 0 {
 		return
 	}
 	if !tlsOnly && proto != "h2" {
 		delete(req.Header, "Te")
+	}
+	if preset.H2HeaderOrderModel() == fingerprint.HeaderOrderModelCFNetwork {
+		modelOrder := preset.CFNetworkHeaderOrder(requestHeaderNames(req.Header, userHeaders, proto), bodyHeader(req, userHeaders, proto))
+		req.Header[http.HeaderOrderKey] = frozenCompleteHeaderOrder(explicit, modelOrder, req.Header, userHeaders)
 	}
 	order := req.Header[http.HeaderOrderKey]
 	marker := slices.Index(order, fingerprint.OtherHeaders)
