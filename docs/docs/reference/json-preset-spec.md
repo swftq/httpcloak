@@ -386,8 +386,10 @@ Where each request's header order comes from.
 }
 ```
 
-`"list"`, the default, takes it from `hpack_header_order` and
-`hpack_header_order_subresource`, by the request's `sec-fetch-dest`.
+`"list"`, the default, takes it from `hpack_header_order`,
+`hpack_header_order_subresource` and `hpack_header_order_early_referer`, by the
+request's `sec-fetch-dest`, whether it is a redirect hop and whether its
+`initiator` is `"xhr"`.
 `"cfnetwork"` computes it from the names the request carries, which is what
 Safari 26 does. Safari has no order per kind of request. It sends the headers a
 request carries itself in the iteration order of the CoreFoundation dictionary
