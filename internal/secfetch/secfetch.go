@@ -131,6 +131,11 @@ func StatedCORS(initiator string, headers map[string][]string) bool {
 // TLS-only request or a preset that sends no Sec-Fetch metadata; "empty" when
 // the caller named the page API the request stands for (see StatedCORS) or it
 // sniffs as a fetch; and the preset's own value for the rest.
+//
+// It is the destination the request is shaped for. The header reaches the wire
+// only on a potentially trustworthy URL: the transport takes Sec-Fetch-* off an
+// http:// request to a host that is not loopback, which still goes out shaped
+// for that destination.
 func Dest(preset *fingerprint.Preset, tlsOnly bool, method, initiator string, headers map[string][]string, exact []fingerprint.HeaderPair) string {
 	if len(exact) > 0 {
 		for _, hp := range exact {

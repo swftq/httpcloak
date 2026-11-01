@@ -53,7 +53,11 @@ import (
 // navigation, cross-site for no-cors.
 //
 // The session writes the results into the first request's headers, so a
-// redirect hop carries them on as it carries the caller's own.
+// redirect hop carries them on as it carries the caller's own. The
+// Sec-Fetch-Site reaches the wire only on a potentially trustworthy URL:
+// stripUntrustworthyMetadata takes it off an http:// request to a host that is
+// not loopback, and a later hop back on https sends the carried value again.
+// Origin is not a Sec-Fetch-* header and goes out either way.
 func (t *Transport) PageFetchHeaders(req *Request) (site, origin string) {
 	if len(req.ExactHeaders) > 0 {
 		return "", ""
