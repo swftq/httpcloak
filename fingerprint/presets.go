@@ -445,9 +445,17 @@ type H2FingerprintConfig struct {
 
 	// HPACKRepresentation pins the HPACK representation of individual header
 	// names: "incremental", "without", "never", or "default". It is an OVERRIDE
-	// LAYER, expected to be empty for a browser profile whose base policy is
-	// already correct, and to carry only the names where a mirrored client
-	// demonstrably differs.
+	// LAYER: it carries only the names where a mirrored client demonstrably
+	// differs from its base policy, and stays empty where the policy already
+	// gives the right bytes. The Chrome and Firefox presets leave it empty.
+	//
+	// The WebKit 26 presets (safari-26, safari-26-ios, and chrome-148-ios and
+	// later) carry four entries on the "chrome" policy, the deltas a Safari
+	// 26.3 capture showed: cookie never indexed, content-length without
+	// indexing, and :method and :protocol with incremental indexing.
+	//
+	// A based_on child that sets the key replaces the inherited map rather
+	// than merging into it, so it has to restate the entries it keeps.
 	//
 	// A curl mirror needs {"authorization": "never"} and nothing else. It does
 	// NOT need a ":path" entry: the Chrome policy already emits a literal
@@ -487,7 +495,7 @@ type H2FingerprintConfig struct {
 	// about to send. nil and 0 mean off, which is what every shipped preset
 	// wants.
 	IdlePingMs         *uint32
-	DisableCookieSplit *bool    // nil = true (single field). Chrome+Firefox crumble (false); Safari single (true).
+	DisableCookieSplit *bool    // nil = true (single field). Chrome, Firefox, WebKit 26 crumble (false); older WebKit single (true). Gates H2, and H3 in HTTP3Transport.
 	SettingsOrder      []uint16 // H2 SETTINGS frame ID order. nil = dynamic from HTTP2Settings.
 	PseudoHeaderOrder  []string // Pseudo-header order. nil = heuristic (Chrome m,a,s,p / Safari m,s,p,a).
 
@@ -807,9 +815,6 @@ func (p *Preset) H2DataFrameMaxSize() uint32 {
 	return 0
 }
 
-// H2HPACKRepresentation returns the per-name representation overrides, or nil
-// when the preset relies entirely on its base policy, which every shipped
-// browser profile does.
 // H2PrefacePingIdle is how long the peer must have been silent before a
 // request on that connection carries a PING alongside it. Zero means none.
 func (p *Preset) H2PrefacePingIdle() time.Duration {
@@ -837,6 +842,8 @@ func (p *Preset) H2IdlePing() time.Duration {
 	return 0
 }
 
+// H2HPACKRepresentation returns the per-name representation overrides, or nil
+// when the preset relies entirely on its base policy.
 func (p *Preset) H2HPACKRepresentation() map[string]string {
 	if p.H2Config != nil && len(p.H2Config.HPACKRepresentation) > 0 {
 		return p.H2Config.HPACKRepresentation
@@ -862,8 +869,11 @@ func (p *Preset) H2StreamPriorityMode() string {
 // H2DisableCookieSplit reports whether to send the Cookie header as a single
 // field instead of crumbling it into one field per cookie-pair. Chrome and
 // Firefox crumble (false) per RFC 9113 8.2.3 / Chromium HpackEncoder
-// CookieToCrumbs; Safari/WebKit sends a single field (true). Used for both the
-// H2 (sardanioss/net HPACK encoder) and H3 (pre-split in HTTP3Transport) paths.
+// CookieToCrumbs. So does Safari 26, which sent one field per cookie on all
+// 189 HTTP/2 requests of a capture, and the WebKit 26 presets follow it. The
+// older WebKit presets still send a single field (true), which no capture has
+// measured. Used for both the H2 (sardanioss/net HPACK encoder) and H3
+// (pre-split in HTTP3Transport) paths.
 func (p *Preset) H2DisableCookieSplit() bool {
 	if p.H2Config != nil && p.H2Config.DisableCookieSplit != nil {
 		return *p.H2Config.DisableCookieSplit

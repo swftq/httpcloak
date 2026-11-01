@@ -618,6 +618,49 @@ func TestIOSChromeH2Config(t *testing.T) {
 	}
 }
 
+// Safari 26.3 sent one cookie field per cookie, each never indexed, on all 189
+// HTTP/2 requests of a capture on macOS 26.3, and :path (apart from ":path: /",
+// static entry 4) and content-length as literals without indexing wherever they
+// appeared. The presets on WebKit 26's network stack, Safari 26 and Chrome on
+// iOS from 148 on, get there with the chrome policy, four representation
+// overrides and the cookie split. The older WebKit presets, which no capture
+// covers, keep the default policy and one cookie field, and the Chrome and
+// Firefox presets are untouched. Every registered name is checked, aliases
+// included.
+func TestWebKitHPACKConfigScope(t *testing.T) {
+	webKit26 := map[string]bool{"safari-26": true, "safari-26-ios": true, "chrome-148-ios": true,
+		"chrome-150-ios": true, "chrome-151-ios": true, "chrome-152-ios": true, "chrome-155-ios": true}
+	safari26 := map[string]string{":method": "incremental", ":protocol": "incremental",
+		"content-length": "without", "cookie": "never"}
+
+	for name := range webKit26 {
+		if GetStrict(name) == nil {
+			t.Errorf("%s is not registered", name)
+		}
+	}
+	for _, name := range Available() {
+		p := GetStrict(name)
+		policy, rep, joined := "chrome", map[string]string(nil), false
+		switch ua := p.UserAgent; {
+		case webKit26[p.Name]:
+			rep = safari26
+		case strings.Contains(ua, "Firefox/"):
+			policy = "default"
+		case strings.Contains(ua, "AppleWebKit/") && !strings.Contains(ua, "Chrome/"):
+			policy, joined = "default", true
+		}
+		if got := p.H2HPACKIndexingPolicy(); got != policy {
+			t.Errorf("%s: HPACK indexing policy %q, want %q", name, got, policy)
+		}
+		if got := p.H2HPACKRepresentation(); !reflect.DeepEqual(got, rep) {
+			t.Errorf("%s: HPACK representation overrides %v, want %v", name, got, rep)
+		}
+		if got := p.H2DisableCookieSplit(); got != joined {
+			t.Errorf("%s: H2DisableCookieSplit() = %v, want %v", name, got, joined)
+		}
+	}
+}
+
 func TestAndroidChromeH2Config(t *testing.T) {
 	p := AndroidChrome146()
 	if p.H2Config == nil {

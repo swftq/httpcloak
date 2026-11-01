@@ -46,6 +46,14 @@
     "http2": {
       "connection_window_update": 10420225,
       "stream_weight": 0,
+      "hpack_indexing_policy": "chrome",
+      "hpack_representation": {
+        ":method": "incremental",
+        ":protocol": "incremental",
+        "content-length": "without",
+        "cookie": "never"
+      },
+      "disable_cookie_split": false,
       "settings_order": [
         2,
         3,

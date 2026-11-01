@@ -1745,8 +1745,10 @@ func (t *HTTP3Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	// header value and does NOT crumble, so we pre-split the single joined Cookie
 	// value into crumbs here; quic-go then writes one "cookie" field per crumb,
 	// contiguous in the cookie header-order slot and already marked never-indexed.
-	// Gated by the preset's cookie-split flag (false => crumble): Chrome and
-	// Firefox crumble, Safari/WebKit sends a single field. Safe to mutate
+	// Gated by the preset's cookie-split flag (false => crumble): Chrome,
+	// Firefox and the WebKit 26 presets crumble, the older WebKit presets send
+	// a single field. WebKit 26 follows its HTTP/2 split here, which a Safari
+	// 26.3 capture showed; no capture has shown its QPACK yet. Safe to mutate
 	// req.Header: each request is per-call, and raceH3H2 dispatches a request to
 	// exactly one protocol (doHTTP3 OR doHTTP2), never both concurrently.
 	if !t.preset.H2DisableCookieSplit() {

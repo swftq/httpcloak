@@ -296,7 +296,7 @@ How header compression and stream priorities behave on the wire.
 |---|---|---|
 | `hpack_indexing_policy` | string | `"chrome"`, `"never"`, `"always"`, `"default"` |
 | `stream_priority_mode` | string | `"chrome"`, `"default"` |
-| `disable_cookie_split` | bool | When true, the `Cookie:` header is sent as one line instead of split into multiple HPACK entries. |
+| `disable_cookie_split` | bool | When true, the `Cookie:` header is sent as one line instead of split into one field per cookie, over HTTP/2 (HPACK), and over HTTP/3 (QPACK) on a `Session` or `Transport` and on a `client.Client` through a SOCKS5 or MASQUE proxy. |
 | `hpack_never_index` | string[] | Lowercase header names that must be sent without HPACK indexing. |
 | `xhr_priority_header` | string | The `priority` header a request sent with `initiator: "xhr"` carries instead of the one `priority_table` gives `empty`. `""` sends none, which is what Firefox does. The HTTP/2 weight stays the `empty` entry's. Omit it and an `XMLHttpRequest` sends what a `fetch()` does. |
 
@@ -364,7 +364,7 @@ those requests use the same order as any other of their shape.
 
 | Field | Type | Meaning |
 |---|---|---|
-| `hpack_representation` | object | Per-header-name override of the HPACK representation: `"incremental"`, `"without"`, `"never"` or `"default"`. Deltas only; browser profiles leave it empty. |
+| `hpack_representation` | object | Per-header-name override of the HPACK representation: `"incremental"`, `"without"`, `"never"` or `"default"`. Deltas from `hpack_indexing_policy` only: the Chrome and Firefox presets leave it empty, and the WebKit 26 presets (`safari-26`, `safari-26-ios`, `chrome-148-ios` and later) carry four on the `chrome` policy, `{":method": "incremental", ":protocol": "incremental", "content-length": "without", "cookie": "never"}`. Names are lowercase, as sent. A `based_on` child that sets it replaces the inherited map rather than merging into it. |
 | `data_frame_max_size` | uint32 | Caps the DATA frame payload this profile sends. Omitted derives it from the client family: 16375 for Chrome, the peer's advertised size otherwise. Chrome's cap exists so header plus payload occupy exactly one TLS record. |
 | `preface_ping_idle_ms` | uint32 | When a connection has been idle this long, the next request on it carries a PING alongside. Omitted or `0` sends none. Chrome uses `10000`. |
 | `preface_ping_hang_ms` | uint32 | The companion hang interval. |
