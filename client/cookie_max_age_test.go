@@ -99,7 +99,7 @@ func TestCookieJarMaxAge(t *testing.T) {
 			// Cookies and ClearExpired, given the cookie past SetCookies' check.
 			c := ParseSetCookie("sid=x; Path=/; "+tc.attrs, u)
 			jar = NewCookieJar()
-			jar.cookies[jar.domainKey(c.Domain)] = []*Cookie{c}
+			jar.cookies[jar.domainKey(c.Domain)] = []storedCookie{{Cookie: c}}
 			if got := jar.CookieHeader(u); got != want {
 				t.Errorf("Cookies sends %q, want %q", got, want)
 			}
