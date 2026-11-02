@@ -279,6 +279,16 @@ type Request struct {
 	// request. Session-layer concept; the transport does not consult this field.
 	DisableHighEntropyClientHints bool
 
+	// AfterUntrustworthyHop marks a redirect hop whose chain has already been
+	// on a URL that is not potentially trustworthy, on its first request or on
+	// a later hop. The session's redirect loop sets it on the hops it builds;
+	// set it yourself only when you follow redirects by hand. On a preset that
+	// sends client hints, a request with a Sec-Fetch-Mode other than navigate
+	// then goes out with none, even to a trustworthy URL, because Chromium adds
+	// them to a fetch() or a subresource only at the start of its chain and a
+	// hop never adds them back. See stripUntrustworthyMetadata.
+	AfterUntrustworthyHop bool
+
 	// DisableRedirectReferer, when true, stops the session layer carrying the
 	// request's Referer onto its redirect hops. Session-layer concept; the
 	// transport does not consult this field.
@@ -3104,9 +3114,24 @@ func stripH1Priority(httpReq *http.Request, req *Request, preset *fingerprint.Pr
 // sent here means http:// to a host that is not loopback; see
 // site.PotentiallyTrustworthy. Chromium, Gecko and WebKit add neither family
 // there, and take both off a redirect hop that comes down to such a URL.
-// Safari 26.3 sent none on any of its 19 requests to a LAN address, and
-// Chrome 156 and Firefox 159 none to a LAN name or address, nor on an
-// https-to-http hop, while each sent them all to localhost.
+// Safari 26.3 sent none on any of its 19 requests to http://192.168.1.151,
+// Chrome 156 none to a LAN name or address and Firefox 159 none to a LAN name,
+// nor either of them on an https-to-http hop, while each sent them all on a
+// request that went straight to localhost.
+//
+// A later hop to a trustworthy URL gets Sec-Fetch-* again, since browsers set
+// it for each hop's URL. Client hints come back only on a navigation: with
+// Request.AfterUntrustworthyHop set, on a preset that sends them, this takes
+// every sec-ch-* off a request unless its Sec-Fetch-Mode is navigate, empty or
+// absent. Chromium adds a fetch()'s or a subresource's hints once, in the
+// renderer, and a redirect only removes them (MaybeRemoveSecHeaders), while the
+// browser process rebuilds a navigation's for each hop
+// (NavigationRequest::OnRedirectChecksComplete). In the capture of 2026-11-02,
+// Chrome 156 sent a fetch(), a POST, an XMLHttpRequest, an image and a script
+// that went https, http, https with hints on the first hop and none on the
+// other two, and an iframe with them on both https hops (hints-plain
+// summary.txt:55-72). Firefox and Safari send no client hints, so a preset of
+// theirs keeps any a caller sets.
 //
 // It runs after the caller merge, so it reaches every source: the preset's,
 // the CORS sniff's, the session's (warmup, the Accept-CH hints, the values a
@@ -3114,21 +3139,37 @@ func stripH1Priority(httpReq *http.Request, req *Request, preset *fingerprint.Pr
 // has already shaped the request in applyPresetHeaders, through the sniff,
 // the priority table and the header-order lookup, so a fetch() keeps its
 // Accept and its priority. A listed order keeps its place for every header
-// that is left; the order list may still name the removed headers, and the
-// HTTP/1.1 writer writes only the names the map holds. A preset on the
+// that is left; the order list may still name the removed headers, and each
+// protocol's writer sends only the names the map holds. A preset on the
 // cfnetwork model lays a request other than a navigation out without them in
 // the first place, as Safari does (cfnetworkHeaderNames).
 //
 // ExactHeaders and TLS-only requests are left alone, since the caller composes
 // the header set in both, and so is a preset with no Sec-Fetch-* in its emit
 // set, which does not describe a browser (presetSendsSecFetch). Only HTTP/1.1
-// carries http://, so on HTTP/2 and HTTP/3 this returns at once.
+// carries http://, so on HTTP/2 and HTTP/3 only the later hop's rule has
+// anything to take off.
 func stripUntrustworthyMetadata(httpReq *http.Request, req *Request, wire *presetWireHeaders, tlsOnly bool) {
-	if !stripsUntrustworthyMetadata(httpReq.URL, wire, tlsOnly, len(req.ExactHeaders) > 0) {
+	exact := len(req.ExactHeaders) > 0
+	if stripsUntrustworthyMetadata(httpReq.URL, wire, tlsOnly, exact) {
+		for key := range httpReq.Header {
+			if isSecFetchHeader(key) || isClientHintHeader(key) {
+				delete(httpReq.Header, key)
+			}
+		}
+		return
+	}
+	if !req.AfterUntrustworthyHop || !wire.sendsClientHints || exact || tlsOnly || !wire.sendsSecFetch {
+		return
+	}
+	// The merge has run, so this is the mode the request goes out with. An
+	// empty one, from a caller's "", or none, from a custom preset's emit set,
+	// says nothing about what the request is, so it stays as built.
+	if mode := headerVal(httpReq.Header, "Sec-Fetch-Mode"); mode == "" || strings.EqualFold(mode, "navigate") {
 		return
 	}
 	for key := range httpReq.Header {
-		if isSecFetchHeader(key) || isClientHintHeader(key) {
+		if isClientHintHeader(key) {
 			delete(httpReq.Header, key)
 		}
 	}
@@ -3159,6 +3200,9 @@ type presetWireHeaders struct {
 	preset        *fingerprint.Preset // the preset this was derived from
 	pairs         []wireHeaderPair
 	sendsSecFetch bool
+	// sendsClientHints is whether the emit set has a client hint, which is true
+	// of the Chromium presets.
+	sendsClientHints bool
 }
 
 func newPresetWireHeaders(preset *fingerprint.Preset) *presetWireHeaders {
@@ -3168,11 +3212,14 @@ func newPresetWireHeaders(preset *fingerprint.Preset) *presetWireHeaders {
 		size = len(preset.HeaderOrder)
 	}
 	pairs := make([]wireHeaderPair, 0, size+1)
+	sendsClientHints := false
 	appendPair := func(key, value string) {
+		clientHint := isClientHintHeader(key)
+		sendsClientHints = sendsClientHints || clientHint
 		pairs = append(pairs, wireHeaderPair{
 			key:        http.CanonicalHeaderKey(key),
 			value:      value,
-			clientHint: isClientHintHeader(key),
+			clientHint: clientHint,
 		})
 	}
 	if len(preset.HeaderOrder) > 0 {
@@ -3190,9 +3237,10 @@ func newPresetWireHeaders(preset *fingerprint.Preset) *presetWireHeaders {
 	// call after the loop used to.
 	pairs = append(pairs, wireHeaderPair{key: "User-Agent", value: preset.UserAgent})
 	return &presetWireHeaders{
-		preset:        preset,
-		pairs:         pairs,
-		sendsSecFetch: presetSendsSecFetch(preset),
+		preset:           preset,
+		pairs:            pairs,
+		sendsSecFetch:    presetSendsSecFetch(preset),
+		sendsClientHints: sendsClientHints,
 	}
 }
 

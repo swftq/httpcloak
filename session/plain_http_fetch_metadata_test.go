@@ -2,6 +2,7 @@ package session
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log"
 	"net"
@@ -24,10 +25,10 @@ import (
 // Safari 26.3 sent none on any of its 19 requests to http://192.168.1.151 and
 // all three Sec-Fetch-* to localhost. Chrome 156 sent none to a page's own LAN
 // name and LAN address, Firefox 159 none to its LAN name, and Chrome no
-// sec-ch-ua there, while every request from the same page to localhost
+// sec-ch-ua there, while every request the same page sent straight to localhost
 // carried them. On a redirect from https:// down to such a host both dropped
-// them on that hop, and sent them again on the hop back up. The session sent
-// them to every URL.
+// them on that hop. On the hop back up both sent Sec-Fetch-* again, and Chrome
+// its client hints only on a navigation. The session sent them to every URL.
 
 // metadataHosts are the hosts each request goes to, and whether a URL with
 // http:// to that host is potentially trustworthy.
@@ -214,10 +215,13 @@ func TestSessionPlainHTTPFetchMetadataStream(t *testing.T) {
 	}
 }
 
-// Each redirect hop is judged by its own URL. A hop from https:// down to a
-// LAN host goes without, the hop back up sends them again, and a hop over to
-// localhost keeps them, the way Chrome 156 and Firefox 159 followed such
-// chains. The https hops run over HTTP/2 and over HTTP/1.1.
+// Each redirect hop's Sec-Fetch-* is judged by its own URL. A hop from https://
+// down to a LAN host goes without, the hop back up sends them again, and a hop
+// over to localhost keeps them, the way Chrome 156 and Firefox 159 followed
+// such chains. On the navigations here client hints go by each hop's URL too,
+// and the POST's stay off after its plain hop;
+// TestSessionClientHintsAfterPlainHop has the rest of that rule. The https hops
+// run over HTTP/2 and over HTTP/1.1.
 func TestSessionFetchMetadataPerRedirectHop(t *testing.T) {
 	plain := startEncodingCapture(t)
 	tls := startTLSMetadataServer(t)
@@ -226,12 +230,13 @@ func TestSessionFetchMetadataPerRedirectHop(t *testing.T) {
 
 	for _, name := range []string{"chrome-latest", "firefox-latest", "safari-latest", "ios-chrome-latest"} {
 		hints := sendsClientHints(fingerprint.Get(name))
-		// missing lists which of the Sec-Fetch-* and, on Chromium, the client
-		// hints are absent from a request that should carry them.
-		missing := func(value func(string) (string, bool)) []string {
+		// missing lists which of the Sec-Fetch-* and, on Chromium when
+		// withHints is set, the client hints are absent from a request that
+		// should carry them.
+		missing := func(withHints bool, value func(string) (string, bool)) []string {
 			var out []string
 			names := []string{"Sec-Fetch-Site", "Sec-Fetch-Mode", "Sec-Fetch-Dest"}
-			if hints {
+			if hints && withHints {
 				names = append(names, metadataTrio...)
 			}
 			for _, n := range names {
@@ -287,7 +292,7 @@ func TestSessionFetchMetadataPerRedirectHop(t *testing.T) {
 				if req.proto != wantProto {
 					t.Errorf("%s %s: https://a.test%s went over %s", name, proto, path, req.proto)
 				}
-				if m := missing(func(n string) (string, bool) {
+				if m := missing(path != p+"/d/3", func(n string) (string, bool) {
 					v := req.header.Get(n)
 					return v, v != ""
 				}); len(m) > 0 {
@@ -317,6 +322,11 @@ func TestSessionFetchMetadataPerRedirectHop(t *testing.T) {
 				if got := req.header.Get("Sec-Fetch-Mode"); got != "cors" || req.body != `{"q":1}` {
 					t.Errorf("%s %s: last hop of the POST: Sec-Fetch-Mode %q, body %q", name, proto, got, req.body)
 				}
+				for _, n := range metadataTrio {
+					if v := req.header.Get(n); v != "" {
+						t.Errorf("%s %s: last hop of the POST: %s %q after its plain hop", name, proto, n, v)
+					}
+				}
 			}
 		}
 
@@ -331,8 +341,262 @@ func TestSessionFetchMetadataPerRedirectHop(t *testing.T) {
 		if sec := secMetadataLines(first); len(sec) > 0 {
 			t.Errorf("%s: http://lan-origin.test before the hop to localhost sent %s", name, strings.Join(sec, "; "))
 		}
-		if m := missing(hop.value); len(m) > 0 {
+		if m := missing(true, hop.value); len(m) > 0 {
 			t.Errorf("%s: the hop to http://localhost has no %s", name, strings.Join(m, ", "))
+		}
+	}
+}
+
+// Chrome adds the client hints of a fetch(), an XMLHttpRequest or a subresource
+// once, and a redirect only takes them away, so once a hop has been on a URL
+// that is not potentially trustworthy the rest of the chain goes without, even
+// to https:// or localhost. Its Sec-Fetch-* still follows each hop's URL, and
+// so do both families on a navigation. Each chain below ran in Chrome 156 and
+// Firefox 159 in the capture of 2026-11-02, for a fetch(), a POST, an
+// XMLHttpRequest, an image, a script and an iframe from a page on
+// http://a.test, and these are the lines of Chrome's in hints-plain
+// summary.txt, with the chain's origins as M for https://a.test, D for
+// http://a.test and L for http://localhost:
+//
+//	D-M 9-23, M 24-29, M-M 30-41, M-D 42-54, M-D-M 55-72, M-D-M-M 73-96,
+//	D-M-D-M 97-120, M-L-M 121-141, L-M 142-153, L-D-M 154-171, D-L-M 172-189
+//
+// Firefox sends no client hints, Safari 26.3 sent none, and the
+// ios-chrome-latest preset lists none.
+func TestSessionClientHintsAfterPlainHop(t *testing.T) {
+	plain := startEncodingCapture(t)
+	tls := startTLSMetadataServer(t)
+	hopURL := func(origin, path string) string {
+		switch origin {
+		case "M":
+			return "https://a.test:" + tls.port + path
+		case "D":
+			return "http://a.test:" + plain.port + path
+		}
+		return "http://localhost:" + plain.port + path
+	}
+	subresource := func(mode, dest string) map[string][]string {
+		return map[string][]string{
+			"Accept": {"*/*"}, "Sec-Fetch-Mode": {mode}, "Sec-Fetch-Dest": {dest}, "Sec-Fetch-Site": {"cross-site"},
+		}
+	}
+	textPOST := subresource("cors", "empty")
+	textPOST["Content-Type"] = []string{"text/plain"}
+	shapes := []struct {
+		name       string
+		method     string
+		status     string
+		headers    map[string][]string
+		body       []byte
+		navigation bool
+	}{
+		{"fetch", "GET", "302 Found", subresource("cors", "empty"), nil, false},
+		{"post", "POST", "307 Temporary Redirect", textPOST, []byte("x"), false},
+		// A 302 makes it a GET and drops the Content-Type, and the caller's
+		// mode still says what it is.
+		{"post302", "POST", "302 Found", textPOST, []byte("x"), false},
+		// A JSON POST sniffs as a fetch() with no Sec-Fetch-* of the caller's.
+		{"sniffed", "POST", "307 Temporary Redirect", map[string][]string{"Content-Type": {"application/json"}}, []byte(`{"q":1}`), false},
+		// Lowercase keys, as the bindings and most callers pass them.
+		{"image", "GET", "302 Found", map[string][]string{"sec-fetch-mode": {"no-cors"}, "sec-fetch-dest": {"image"}}, nil, false},
+		{"script", "GET", "302 Found", subresource("no-cors", "script"), nil, false},
+		{"iframe", "GET", "302 Found", map[string][]string{"Sec-Fetch-Mode": {"navigate"}, "Sec-Fetch-Dest": {"iframe"}}, nil, true},
+		{"navigation", "GET", "302 Found", nil, nil, true},
+	}
+	chains := []string{"M", "M-M", "M-D", "M-D-M", "M-D-M-M", "D-M", "D-M-D-M", "M-L-M", "L-M", "L-D-M", "D-L-M"}
+
+	for _, name := range []string{"chrome-latest", "android-chrome-latest", "firefox-latest", "safari-latest", "ios-chrome-latest"} {
+		hints := sendsClientHints(fingerprint.Get(name))
+		for _, forceH1 := range []bool{false, true} {
+			proto := "h2"
+			if forceH1 {
+				proto = "h1"
+			}
+			s := NewSession("", &protocol.SessionConfig{
+				Preset:             name,
+				ConnectTo:          metadataConnectTo,
+				InsecureSkipVerify: true,
+				DisableHTTP3:       true,
+				ForceHTTP1:         forceH1,
+				FollowRedirects:    true,
+			})
+			for _, sh := range shapes {
+				for _, chain := range chains {
+					hops := strings.Split(chain, "-")
+					prefix := "/after-plain/" + name + "/" + proto + "/" + sh.name + "/" + chain + "/"
+					for i, origin := range hops[:len(hops)-1] {
+						path := prefix + strconv.Itoa(i)
+						reply := cannedReply{status: sh.status, header: []string{"Location: " + hopURL(hops[i+1], prefix+strconv.Itoa(i+1))}}
+						if origin == "M" {
+							tls.respond(path, reply)
+						} else {
+							plain.respond(path, reply)
+						}
+					}
+					sendAndClose(t, s, &transport.Request{
+						Method: sh.method, URL: hopURL(hops[0], prefix+"0"), Headers: sh.headers, Body: sh.body,
+					})
+
+					beenDown := false
+					for i, origin := range hops {
+						what := fmt.Sprintf("%s %s %s %s, hop %d (%s)", name, proto, sh.name, chain, i, origin)
+						path := prefix + strconv.Itoa(i)
+						var value func(string) (string, bool)
+						if origin == "M" {
+							req, ok := tls.request(path)
+							if !ok {
+								t.Fatalf("%s: no request arrived", what)
+							}
+							value = func(n string) (string, bool) {
+								v := req.header.Get(n)
+								return v, v != ""
+							}
+						} else {
+							req := plain.request(path)
+							if req == nil {
+								t.Fatalf("%s: no request arrived", what)
+							}
+							if origin == "D" {
+								beenDown = true
+								if sec := secMetadataLines(req); len(sec) > 0 {
+									t.Errorf("%s: sent %s", what, strings.Join(sec, "; "))
+								}
+								continue
+							}
+							value = req.value
+						}
+						for _, n := range []string{"Sec-Fetch-Site", "Sec-Fetch-Mode", "Sec-Fetch-Dest"} {
+							if _, ok := value(n); !ok {
+								t.Errorf("%s: no %s", what, n)
+							}
+						}
+						wantHints := hints && (sh.navigation || !beenDown)
+						for _, n := range metadataTrio {
+							if v, ok := value(n); ok != wantHints {
+								t.Errorf("%s: %s %q, want it sent: %v", what, n, v, wantHints)
+							}
+						}
+					}
+				}
+			}
+			s.Close()
+		}
+	}
+}
+
+// The rule takes the whole sec-ch-* family off the rest of such a chain: the
+// hints a host asked for in Accept-CH and any the caller sets, as on the plain
+// hop itself. A navigation keeps both. ExactHeaders and TLS-only requests go
+// out as built on every hop, and DisableClientHints still sends none on any.
+// The rule is Chromium's: a preset that sends no client hints keeps a caller's
+// on a later hop, though not on the plain hop itself.
+func TestSessionClientHintsAfterPlainHopOtherSources(t *testing.T) {
+	plain := startEncodingCapture(t)
+	tls := startTLSMetadataServer(t)
+	httpsURL := func(path string) string { return "https://a.test:" + tls.port + path }
+	httpURL := func(path string) string { return "http://a.test:" + plain.port + path }
+	chain := func(prefix string) string {
+		tls.respond(prefix+"/0", cannedReply{status: "302 Found", header: []string{"Location: " + httpURL(prefix+"/1")}})
+		plain.respond(prefix+"/1", cannedReply{status: "302 Found", header: []string{"Location: " + httpsURL(prefix+"/2")}})
+		return httpsURL(prefix + "/0")
+	}
+	hop := func(path string) http.Header {
+		t.Helper()
+		req, ok := tls.request(path)
+		if !ok {
+			t.Fatalf("no request reached https://a.test%s", path)
+		}
+		return req.header
+	}
+	const arch, mine = "sec-ch-ua-arch", "sec-ch-ua-form-factors"
+	newSession := func() *Session {
+		return NewSession("", &protocol.SessionConfig{
+			Preset:             "chrome-latest",
+			ConnectTo:          metadataConnectTo,
+			InsecureSkipVerify: true,
+			DisableHTTP3:       true,
+			FollowRedirects:    true,
+		})
+	}
+	fetchShape := func() map[string][]string {
+		return map[string][]string{"Accept": {"*/*"}, "Sec-Fetch-Mode": {"cors"}, "Sec-Fetch-Dest": {"empty"}, mine: {`"Desktop"`}}
+	}
+	navShape := func() map[string][]string { return map[string][]string{mine: {`"Desktop"`}} }
+
+	s := newSession()
+	tls.respond("/sources/ch", cannedReply{status: "200 OK", header: []string{"Accept-CH: Sec-CH-UA-Arch"}})
+	plain.get(t, s, httpsURL("/sources/ch"), nil)
+	plain.get(t, s, chain("/sources/fetch"), fetchShape())
+	plain.get(t, s, chain("/sources/nav"), navShape())
+	s.Close()
+	for _, n := range append([]string{arch, mine}, metadataTrio...) {
+		if hop("/sources/fetch/0").Get(n) == "" {
+			t.Errorf("fetch(), first hop: no %s", n)
+		}
+		if v := hop("/sources/fetch/2").Get(n); v != "" {
+			t.Errorf("fetch(), hop after the plain one: %s %q", n, v)
+		}
+		if hop("/sources/nav/0").Get(n) == "" || hop("/sources/nav/2").Get(n) == "" {
+			t.Errorf("navigation: %s %q on the first hop, %q after the plain one, want it on both", n,
+				hop("/sources/nav/0").Get(n), hop("/sources/nav/2").Get(n))
+		}
+	}
+	for _, p := range []string{"/sources/fetch/1", "/sources/nav/1"} {
+		req := plain.request(p)
+		if req == nil {
+			t.Fatalf("no request reached http://a.test%s", p)
+		}
+		if sec := secMetadataLines(req); len(sec) > 0 {
+			t.Errorf("http://a.test%s sent %s", p, strings.Join(sec, "; "))
+		}
+	}
+
+	s = newSession()
+	defer s.Close()
+	sendAndClose(t, s, &transport.Request{Method: "GET", URL: chain("/sources/exact"), ExactHeaders: []fingerprint.HeaderPair{
+		{Key: "sec-fetch-mode", Value: "cors"}, {Key: "sec-ch-ua", Value: `"Exact";v="1"`},
+	}})
+	tlsOnly := true
+	sendAndClose(t, s, &transport.Request{Method: "GET", URL: chain("/sources/tlsonly"), TLSOnly: &tlsOnly, Headers: map[string][]string{
+		"Sec-Fetch-Mode": {"cors"}, "sec-ch-ua": {`"Exact";v="1"`},
+	}})
+	for _, prefix := range []string{"/sources/exact", "/sources/tlsonly"} {
+		if v := hop(prefix + "/2").Get("sec-ch-ua"); v != `"Exact";v="1"` {
+			t.Errorf("%s, hop after the plain one: sec-ch-ua %q, want the caller's", prefix, v)
+		}
+		if req := plain.request(prefix + "/1"); req == nil {
+			t.Fatalf("no request reached http://a.test%s/1", prefix)
+		} else if v, _ := req.value("sec-ch-ua"); v != `"Exact";v="1"` {
+			t.Errorf("%s, plain hop: sec-ch-ua %q, want the caller's", prefix, v)
+		}
+	}
+	sendAndClose(t, s, &transport.Request{Method: "GET", URL: chain("/sources/disabled"), DisableClientHints: true})
+	if v := hop("/sources/disabled/0").Get("sec-ch-ua") + hop("/sources/disabled/2").Get("sec-ch-ua"); v != "" {
+		t.Errorf("DisableClientHints: sent sec-ch-ua %q", v)
+	}
+
+	for _, name := range []string{"firefox-latest", "safari-latest", "ios-chrome-latest"} {
+		other := NewSession("", &protocol.SessionConfig{
+			Preset:             name,
+			ConnectTo:          metadataConnectTo,
+			InsecureSkipVerify: true,
+			DisableHTTP3:       true,
+			FollowRedirects:    true,
+		})
+		prefix := "/sources/" + name
+		plain.get(t, other, chain(prefix), fetchShape())
+		other.Close()
+		for _, i := range []string{"/0", "/2"} {
+			if v := hop(prefix + i).Get(mine); v != `"Desktop"` {
+				t.Errorf("%s, https://a.test%s: %s %q, want the caller's", name, prefix+i, mine, v)
+			}
+		}
+		req := plain.request(prefix + "/1")
+		if req == nil {
+			t.Fatalf("%s: no request reached http://a.test%s/1", name, prefix)
+		}
+		if sec := secMetadataLines(req); len(sec) > 0 {
+			t.Errorf("%s: http://a.test%s/1 sent %s", name, prefix, strings.Join(sec, "; "))
 		}
 	}
 }
