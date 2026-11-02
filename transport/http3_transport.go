@@ -1612,6 +1612,10 @@ func (t *HTTP3Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	// request with the whole set. Only a transport-wide TLS-only setting
 	// stopped it, never a per-request one.
 
+	// Nor may the HTTP/3 layer fill in a User-Agent of its own, as it would for
+	// an ExactHeaders list that names none or a direct call that sets none.
+	suppressDefaultUserAgent(req.Header)
+
 	// Cookie crumbling (H3/QPACK). Chrome and Firefox split the Cookie header
 	// into one QPACK field per cookie-pair (Chromium ValueSplittingHeaderList,
 	// CookieCrumbling::kEnabled). quic-go's request writer emits one field per
@@ -1705,6 +1709,25 @@ func (t *HTTP3Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	}
 
 	return resp, err
+}
+
+// suppressDefaultUserAgent keeps the library's own name off the wire. quic-go's
+// request writer adds "user-agent: quic-go HTTP/3" to a request unless it finds
+// a field of that name, in any casing, and writes nothing for one with an empty
+// value, which is how the TLS-only path in applyPresetHeaders stops it too. A
+// name with no values does not count, because the writer's ordered pass skips
+// it before looking at the name. A nil Header stays nil, for http3.Transport to
+// reject with an error.
+func suppressDefaultUserAgent(h http.Header) {
+	if h == nil {
+		return
+	}
+	for k, v := range h {
+		if len(v) > 0 && strings.EqualFold(k, "user-agent") {
+			return
+		}
+	}
+	h["User-Agent"] = []string{""}
 }
 
 // IsConnectionReused returns true if requests > dials (meaning reuse happened)
