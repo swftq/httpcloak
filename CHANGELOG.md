@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- **`HTTP3Transport.RoundTrip` sends the headers it is given**: called directly, rather than through `Transport` or `client.Client`, it used to fill in every preset header the request lacked, and the preset's User-Agent when the request had none. It now sends the request's headers as they are, as the HTTP/1.1 and HTTP/2 paths do. Code that relied on the fill-in should set those headers itself.
+- **`HTTP3Transport.RoundTrip` sends the headers it is given**: called directly, rather than through `Transport` or `client.Client`, it used to fill in every preset header the request lacked, and the preset's User-Agent when the request had none. It now sends the request's headers as they are, as the HTTP/1.1 and HTTP/2 paths do. Code that relied on the fill-in should set those headers itself. A request with no User-Agent goes out with none, not with the HTTP/3 library's own `quic-go HTTP/3`. An `ExactHeaders` request over HTTP/3 got the fill-in as well: it now carries only the pairs it lists, so a list with no `user-agent` pair sends no User-Agent.
 
 ### Fixed
 
