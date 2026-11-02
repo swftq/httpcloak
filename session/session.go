@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/sardanioss/httpcloak/fingerprint"
+	"github.com/sardanioss/httpcloak/internal/site"
 	"github.com/sardanioss/httpcloak/protocol"
 	"github.com/sardanioss/httpcloak/transport"
 )
@@ -646,6 +647,11 @@ func (s *Session) requestWithRedirects(ctx context.Context, req *transport.Reque
 				// silently. Referer is the one thing the redirect path may still
 				// add on top, and DisableRedirectReferer turns that off.
 				ExactHeaders: req.ExactHeaders,
+
+				// Where the chain has been. The transport decides what that
+				// means for each hop, once it knows the request's final
+				// Sec-Fetch-Mode.
+				AfterUntrustworthyHop: req.AfterUntrustworthyHop || !potentiallyTrustworthyURL(req.URL),
 			}
 
 			// Copy safe headers
@@ -1747,6 +1753,13 @@ func splitCookies(s string) []string {
 
 func isDigit(c byte) bool {
 	return c >= '0' && c <= '9'
+}
+
+// potentiallyTrustworthyURL is site.PotentiallyTrustworthy for a URL the
+// session holds as a string. One that does not parse is not trustworthy.
+func potentiallyTrustworthyURL(rawURL string) bool {
+	u, err := url.Parse(rawURL)
+	return err == nil && site.PotentiallyTrustworthy(u)
 }
 
 // isRedirectStatus returns true for 3xx redirect status codes

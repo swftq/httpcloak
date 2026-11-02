@@ -21,7 +21,7 @@ import (
 // potentially trustworthy. Safari 26.3 sent none on any of its 19 requests to
 // http://192.168.1.151 and all three Sec-Fetch-* to localhost; Chrome 156 sent
 // none to a LAN name and a LAN address, Firefox 159 none to a LAN name, and
-// Chrome no sec-ch-ua there, while every request from the same page to
+// Chrome no sec-ch-ua there, while every request the same page sent straight to
 // localhost carried them. ConnectTo puts the LAN name on the wire while the
 // socket stays on loopback.
 
@@ -232,6 +232,112 @@ func TestUntrustworthyURLStripExemptions(t *testing.T) {
 	}
 	if v, _ := head.value("sec-ch-ua"); v != chUA {
 		t.Errorf("preset without Sec-Fetch-*: sec-ch-ua %q, want its own %q", v, chUA)
+	}
+
+	// The later hop's rule leaves that preset alone as well.
+	custom.SetConnectTo("localhost", "127.0.0.1")
+	srv.send(t, custom, false, &Request{Method: "GET", URL: "http://localhost:" + srv.port + "/custom-after",
+		Headers: map[string][]string{"Sec-Fetch-Mode": {"cors"}}, AfterUntrustworthyHop: true})
+	if v, _ := srv.head(t, "/custom-after").value("sec-ch-ua"); v != chUA {
+		t.Errorf("preset without Sec-Fetch-*, after an untrustworthy hop: sec-ch-ua %q, want its own %q", v, chUA)
+	}
+}
+
+// Request.AfterUntrustworthyHop keeps client hints off a request that is not a
+// navigation, even to a trustworthy URL, and leaves its Sec-Fetch-* alone. It
+// does nothing to a navigation, and a URL that is not trustworthy loses both
+// families with or without it. The session sets it; see
+// TestSessionClientHintsAfterPlainHop for the chains.
+func TestAfterUntrustworthyHopDropsClientHints(t *testing.T) {
+	srv := startTrustCapture(t)
+	tr := NewTransport("chrome-latest")
+	tr.SetConnectTo("localhost", "127.0.0.1")
+	tr.SetConnectTo("lan-origin.test", "127.0.0.1")
+	defer tr.Close()
+	local := "http://localhost:" + srv.port
+	lan := "http://lan-origin.test:" + srv.port
+
+	shapes := []struct {
+		name       string
+		method     string
+		headers    map[string][]string
+		body       []byte
+		navigation bool
+	}{
+		{"navigation", "GET", nil, nil, true},
+		{"iframe", "GET", map[string][]string{"sec-fetch-mode": {"navigate"}, "sec-fetch-dest": {"iframe"}}, nil, true},
+		// A JSON POST sniffs as a fetch(): cors, empty.
+		{"fetch", "POST", map[string][]string{"Content-Type": {"application/json"}}, []byte(`{"q":1}`), false},
+		// Lowercase keys, as the bindings and most callers pass them, and a
+		// caller's own hint.
+		{"image", "GET", map[string][]string{"sec-fetch-mode": {"no-cors"}, "sec-fetch-dest": {"image"}, "sec-ch-ua-model": {`"X"`}}, nil, false},
+	}
+	for _, stream := range []bool{false, true} {
+		for _, after := range []bool{false, true} {
+			for _, sh := range shapes {
+				what := fmt.Sprintf("%s, stream %v, AfterUntrustworthyHop %v", sh.name, stream, after)
+				prefix := fmt.Sprintf("/after/%v/%v/%s", stream, after, sh.name)
+				srv.send(t, tr, stream, &Request{Method: sh.method, URL: local + prefix + "/local", Headers: sh.headers, Body: sh.body, AfterUntrustworthyHop: after})
+				srv.send(t, tr, stream, &Request{Method: sh.method, URL: lan + prefix + "/lan", Headers: sh.headers, Body: sh.body, AfterUntrustworthyHop: after})
+
+				head := srv.head(t, prefix+"/local")
+				for _, want := range []string{"Sec-Fetch-Site", "Sec-Fetch-Mode", "Sec-Fetch-Dest"} {
+					if _, ok := head.value(want); !ok {
+						t.Errorf("%s: no %s", what, want)
+					}
+				}
+				var hints []string
+				for _, n := range head.names() {
+					if strings.HasPrefix(strings.ToLower(n), "sec-ch-") {
+						hints = append(hints, n)
+					}
+				}
+				if wantHints := !after || sh.navigation; wantHints != (len(hints) > 0) {
+					t.Errorf("%s: sent client hints %v, want any: %v", what, hints, wantHints)
+				}
+				if sec := srv.head(t, prefix+"/lan").secMetadata(); len(sec) > 0 {
+					t.Errorf("%s to a LAN host: sent %v", what, sec)
+				}
+			}
+		}
+	}
+
+	// ExactHeaders and TLS-only requests stay as built here too, and so does a
+	// request whose Sec-Fetch-Mode the caller set to empty, which says nothing
+	// about what it is.
+	exact := []fingerprint.HeaderPair{{Key: "sec-fetch-mode", Value: "cors"}, {Key: "sec-ch-ua", Value: `"Exact";v="1"`}}
+	srv.send(t, tr, false, &Request{Method: "GET", URL: local + "/after/exact", ExactHeaders: exact, AfterUntrustworthyHop: true})
+	if v, _ := srv.head(t, "/after/exact").value("sec-ch-ua"); v != `"Exact";v="1"` {
+		t.Errorf("ExactHeaders: sec-ch-ua %q, want the caller's", v)
+	}
+	tlsOnly := true
+	srv.send(t, tr, false, &Request{Method: "GET", URL: local + "/after/tls-only", TLSOnly: &tlsOnly, AfterUntrustworthyHop: true,
+		Headers: map[string][]string{"Sec-Fetch-Mode": {"cors"}, "sec-ch-ua": {`"Exact";v="1"`}}})
+	if v, _ := srv.head(t, "/after/tls-only").value("sec-ch-ua"); v != `"Exact";v="1"` {
+		t.Errorf("TLS-only: sec-ch-ua %q, want the caller's", v)
+	}
+	srv.send(t, tr, false, &Request{Method: "GET", URL: local + "/after/empty-mode", AfterUntrustworthyHop: true,
+		Headers: map[string][]string{"Sec-Fetch-Mode": {""}}})
+	if _, ok := srv.head(t, "/after/empty-mode").value("sec-ch-ua"); !ok {
+		t.Error("a request with an empty Sec-Fetch-Mode lost its client hints")
+	}
+
+	// The rule is Chromium's. A preset that sends no client hints keeps a
+	// caller's on such a hop, though not on a URL that is not trustworthy.
+	for _, name := range []string{"firefox-latest", "safari-latest", "ios-chrome-latest"} {
+		other := NewTransport(name)
+		other.SetConnectTo("localhost", "127.0.0.1")
+		other.SetConnectTo("lan-origin.test", "127.0.0.1")
+		headers := map[string][]string{"Sec-Fetch-Mode": {"cors"}, "sec-ch-ua-model": {`"X"`}}
+		srv.send(t, other, false, &Request{Method: "GET", URL: local + "/after/" + name, Headers: headers, AfterUntrustworthyHop: true})
+		srv.send(t, other, false, &Request{Method: "GET", URL: lan + "/after/" + name + "/lan", Headers: headers, AfterUntrustworthyHop: true})
+		other.Close()
+		if v, _ := srv.head(t, "/after/"+name).value("sec-ch-ua-model"); v != `"X"` {
+			t.Errorf("%s: sec-ch-ua-model %q, want the caller's", name, v)
+		}
+		if sec := srv.head(t, "/after/"+name+"/lan").secMetadata(); len(sec) > 0 {
+			t.Errorf("%s to a LAN host: sent %v", name, sec)
+		}
 	}
 }
 
