@@ -39,7 +39,8 @@ func requestHeaderNames(header http.Header, userHeaders map[string][]string, pro
 
 // cfnetworkHeaderNames is requestHeaderNames for a preset on the cfnetwork
 // model, minus the headers stripUntrustworthyMetadata will take off a request
-// that is not a navigation.
+// to a URL that is not potentially trustworthy, unless it is a navigation. The
+// later hop's rule is not counted here; see applyPresetHeaders.
 //
 // Over plain HTTP to a host that is not loopback no Sec-Fetch-* or sec-ch-*
 // header goes out, and Safari never adds one there, so its table holds fewer

@@ -3469,7 +3469,8 @@ func applyPresetHeaders(httpReq *http.Request, wire *presetWireHeaders, customHe
 	// them. Anything that adds or removes a header has to do it before this
 	// point, or the request is laid out as the set it no longer is. The one
 	// removal after it, stripUntrustworthyMetadata's, is taken into account
-	// here; see cfnetworkHeaderNames.
+	// here; see cfnetworkHeaderNames. Its rule for a later hop is not: that
+	// reaches only a custom preset that puts client hints on this model.
 	if preset.H2HeaderOrderModel() == fingerprint.HeaderOrderModelCFNetwork {
 		presetOrder = preset.CFNetworkHeaderOrder(cfnetworkHeaderNames(httpReq, wire, userHeaders, protocol, tlsOnly),
 			bodyHeader(httpReq, userHeaders, protocol))

@@ -249,6 +249,85 @@ func TestUntrustworthyURLStripExemptions(t *testing.T) {
 	}
 }
 
+// Each protocol's path calls stripUntrustworthyMetadata for itself, and the
+// other tests here and the session's chains reach only some of them, so this
+// sends the flag down all seven: HTTP/1.1 forced, on an ALPN fallback and
+// streamed, and HTTP/2 and HTTP/3 through Do and DoStream.
+func TestAfterUntrustworthyHopOnEveryPath(t *testing.T) {
+	h1 := startH1LineCapture(t)
+	h2 := startH2CaptureServer(t)
+	h3 := startH3OrderCapture(t)
+	var sender trustCapture
+	over := func(proto Protocol, addr string, stream bool, names func() []string) func(string, *Request) []string {
+		return func(preset string, req *Request) []string {
+			t.Helper()
+			tr := NewTransport(preset)
+			defer tr.Close()
+			tr.SetInsecureSkipVerify(true)
+			tr.SetProtocol(proto)
+			req.Method, req.URL = "GET", "https://"+addr+"/after"
+			sender.send(t, tr, stream, req)
+			return names()
+		}
+	}
+	h2Names := func() []string {
+		t.Helper()
+		select {
+		case got := <-h2.captures:
+			return got.HeaderOrder
+		case <-time.After(5 * time.Second):
+			t.Fatal("no HTTP/2 HEADERS frame captured")
+		}
+		return nil
+	}
+	h3Names := func() []string {
+		t.Helper()
+		select {
+		case got := <-h3.captures:
+			return got
+		case <-time.After(5 * time.Second):
+			t.Fatal("no HTTP/3 HEADERS frame captured")
+		}
+		return nil
+	}
+	paths := map[string]func(string, *Request) []string{
+		"h2":        over(ProtocolHTTP2, h2.addr, false, h2Names),
+		"h2 stream": over(ProtocolHTTP2, h2.addr, true, h2Names),
+		"h3":        over(ProtocolHTTP3, h3.addr, false, h3Names),
+		"h3 stream": over(ProtocolHTTP3, h3.addr, true, h3Names),
+	}
+	for _, path := range h1Paths {
+		paths["h1 "+path] = func(preset string, req *Request) []string {
+			t.Helper()
+			var names []string
+			for _, line := range h1.send(t, path, preset, req) {
+				name, _, _ := strings.Cut(line, ":")
+				names = append(names, strings.ToLower(name))
+			}
+			return names
+		}
+	}
+	fetch := func() map[string][]string {
+		return map[string][]string{"Accept": {"*/*"}, "Sec-Fetch-Mode": {"cors"}, "Sec-Fetch-Dest": {"empty"}}
+	}
+	for _, preset := range []string{"chrome-latest", "android-chrome-latest"} {
+		for path, send := range paths {
+			names := send(preset, &Request{Headers: fetch(), AfterUntrustworthyHop: true})
+			if slices.Contains(names, "sec-ch-ua") || !slices.Contains(names, "sec-fetch-mode") {
+				t.Errorf("%s %s, fetch() with the flag: sent %v", preset, path, names)
+			}
+			names = send(preset, &Request{Headers: fetch()})
+			if !slices.Contains(names, "sec-ch-ua") {
+				t.Errorf("%s %s, fetch() without the flag: sent %v", preset, path, names)
+			}
+			names = send(preset, &Request{AfterUntrustworthyHop: true})
+			if !slices.Contains(names, "sec-ch-ua") {
+				t.Errorf("%s %s, navigation with the flag: sent %v", preset, path, names)
+			}
+		}
+	}
+}
+
 // Request.AfterUntrustworthyHop keeps client hints off a request that is not a
 // navigation, even to a trustworthy URL, and leaves its Sec-Fetch-* alone. It
 // does nothing to a navigation, and a URL that is not trustworthy loses both
