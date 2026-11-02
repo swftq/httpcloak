@@ -395,14 +395,20 @@ func TestSessionClientHintsAfterPlainHop(t *testing.T) {
 		// A 302 makes it a GET and drops the Content-Type, and the caller's
 		// mode still says what it is.
 		{"post302", "POST", "302 Found", textPOST, []byte("x"), false},
-		// A JSON POST sniffs as a fetch() with no Sec-Fetch-* of the caller's.
+		// A JSON POST sniffs as a fetch() with no Sec-Fetch-* of the caller's,
+		// and stays one through a 302 or a 303 that makes it a GET.
 		{"sniffed", "POST", "307 Temporary Redirect", map[string][]string{"Content-Type": {"application/json"}}, []byte(`{"q":1}`), false},
+		{"sniffed302", "POST", "302 Found", map[string][]string{"Content-Type": {"application/json"}}, []byte(`{"q":1}`), false},
+		{"sniffed303", "POST", "303 See Other", map[string][]string{"Content-Type": {"application/json"}}, []byte(`{"q":1}`), false},
+		// An XMLHttpRequest through Request.Initiator.
+		{"xhr", "GET", "302 Found", nil, nil, false},
 		// Lowercase keys, as the bindings and most callers pass them.
 		{"image", "GET", "302 Found", map[string][]string{"sec-fetch-mode": {"no-cors"}, "sec-fetch-dest": {"image"}}, nil, false},
 		{"script", "GET", "302 Found", subresource("no-cors", "script"), nil, false},
 		{"iframe", "GET", "302 Found", map[string][]string{"Sec-Fetch-Mode": {"navigate"}, "Sec-Fetch-Dest": {"iframe"}}, nil, true},
 		{"navigation", "GET", "302 Found", nil, nil, true},
 	}
+	initiators := map[string]string{"xhr": transport.InitiatorXHR}
 	chains := []string{"M", "M-M", "M-D", "M-D-M", "M-D-M-M", "D-M", "D-M-D-M", "M-L-M", "L-M", "L-D-M", "D-L-M"}
 
 	for _, name := range []string{"chrome-latest", "android-chrome-latest", "firefox-latest", "safari-latest", "ios-chrome-latest"} {
@@ -435,6 +441,7 @@ func TestSessionClientHintsAfterPlainHop(t *testing.T) {
 					}
 					sendAndClose(t, s, &transport.Request{
 						Method: sh.method, URL: hopURL(hops[0], prefix+"0"), Headers: sh.headers, Body: sh.body,
+						Initiator: initiators[sh.name],
 					})
 
 					beenDown := false

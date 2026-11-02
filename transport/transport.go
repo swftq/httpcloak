@@ -3141,8 +3141,10 @@ func stripH1Priority(httpReq *http.Request, req *Request, preset *fingerprint.Pr
 // Accept and its priority. A listed order keeps its place for every header
 // that is left; the order list may still name the removed headers, and each
 // protocol's writer sends only the names the map holds. A preset on the
-// cfnetwork model lays a request other than a navigation out without them in
-// the first place, as Safari does (cfnetworkHeaderNames).
+// cfnetwork model lays a request other than a navigation to a URL that is not
+// trustworthy out without them in the first place, as Safari does
+// (cfnetworkHeaderNames). It does not do so for the later hop's rule, which
+// reaches only a custom preset that puts client hints on that model.
 //
 // ExactHeaders and TLS-only requests are left alone, since the caller composes
 // the header set in both, and so is a preset with no Sec-Fetch-* in its emit
@@ -3460,7 +3462,8 @@ func applyPresetHeaders(httpReq *http.Request, wire *presetWireHeaders, customHe
 	// them. Anything that adds or removes a header has to do it before this
 	// point, or the request is laid out as the set it no longer is. The one
 	// removal after it, stripUntrustworthyMetadata's, is taken into account
-	// here; see cfnetworkHeaderNames.
+	// here; see cfnetworkHeaderNames. Its rule for a later hop is not: that
+	// reaches only a custom preset that puts client hints on this model.
 	if preset.H2HeaderOrderModel() == fingerprint.HeaderOrderModelCFNetwork {
 		presetOrder = preset.CFNetworkHeaderOrder(cfnetworkHeaderNames(httpReq, wire, userHeaders, protocol, tlsOnly),
 			bodyHeader(httpReq, userHeaders, protocol))
