@@ -12,7 +12,6 @@ import (
 	"fmt"
 	"io"
 	"maps"
-	"net"
 	"net/url"
 	"os"
 	"slices"
@@ -618,15 +617,15 @@ func (s *Session) requestWithRedirects(ctx context.Context, req *transport.Reque
 				newMethod = "GET"
 			}
 
-			// Browser-parity scheme/origin policy for the new hop:
-			//   - https → http downgrade: strip Referer (Chrome's default
-			//     strict-origin-when-cross-origin), Authorization, and
-			//     Proxy-Authorization (WHATWG Fetch "HTTP-redirect fetch").
-			//   - cross-origin (any scheme change or host/port change):
-			//     strip Authorization and Proxy-Authorization — Chrome, Firefox,
-			//     curl (≥7.58) and Fetch all do this to prevent credential leaks.
-			// Computed here rather than beside the header loop because the
-			// callback below is handed both.
+			// Browser-parity credential policy for the new hop: a cross-origin
+			// hop (any scheme change or host/port change), which includes every
+			// https → http downgrade, strips Authorization and
+			// Proxy-Authorization. Chrome, Firefox, curl (≥7.58) and Fetch's
+			// "HTTP-redirect fetch" all do this to prevent credential leaks.
+			// The Referer follows its own rule, judged against the Referer
+			// itself rather than the URL that issued the 3xx; see
+			// redirectReferer. Computed here rather than beside the header loop
+			// because the callback below is handed both.
 			schemeDowngrade := isSchemeDowngrade(req.URL, redirectURL)
 			crossOrigin := !sameOrigin(req.URL, redirectURL)
 
@@ -658,6 +657,19 @@ func (s *Session) requestWithRedirects(ctx context.Context, req *transport.Reque
 					// matches exactly what they returned.
 					return nil, err
 				}
+			}
+
+			// An exact header list keeps its Referer pair to the same rule as the
+			// header below. Leaving a lone Referer out would empty the list,
+			// and an empty list switches exact mode off, so that hop would go
+			// out with the whole preset pipeline the caller replaced; stop
+			// instead.
+			exactHeaders, ok := exactHeadersForHop(req.ExactHeaders, redirectURL, req.DisableRedirectReferer)
+			if !ok {
+				resp.History = history
+				return resp, fmt.Errorf("cannot follow %d redirect to %s: the hop drops the "+
+					"Referer, the only pair in ExactHeaders, and an empty list would send "+
+					"the preset's headers instead", resp.StatusCode, redirectURL)
 			}
 
 			// Create redirect request. Everything below the first four fields is
@@ -696,9 +708,10 @@ func (s *Session) requestWithRedirects(ctx context.Context, req *transport.Reque
 				// nothing else is added, and dropping it here meant a caller
 				// mirroring a captured request got their exact bytes on the first
 				// request and the full preset pipeline on every hop after it,
-				// silently. Referer is the one thing the redirect path may still
-				// add on top, and DisableRedirectReferer turns that off.
-				ExactHeaders: req.ExactHeaders,
+				// silently. The transport ignores Headers in that mode, so a
+				// Referer pair is the one thing in it the hop rewrites, in its own
+				// slot and spelling; see exactHeadersForHop.
+				ExactHeaders: exactHeaders,
 			}
 
 			// Copy safe headers
@@ -712,7 +725,8 @@ func (s *Session) requestWithRedirects(ctx context.Context, req *transport.Reque
 				if lk == "cookie" {
 					continue
 				}
-				if schemeDowngrade && lk == "referer" {
+				// Referer is worked out below, from this request's value.
+				if lk == "referer" {
 					continue
 				}
 				if (crossOrigin || schemeDowngrade) && (lk == "authorization" || lk == "proxy-authorization") {
@@ -721,51 +735,24 @@ func (s *Session) requestWithRedirects(ctx context.Context, req *transport.Reque
 				newReq.Headers[k] = v
 			}
 
-			// Referer and Sec-Fetch-Site follow the chain as Chrome 158 sent
-			// them, recorded on a typed navigation and on one a page started,
-			// each redirected same-origin and then to another site. Every hop
-			// sends the FIRST request's referrer, not the URL that redirected,
-			// under strict-origin-when-cross-origin for the hop's own URL, as
-			// Fetch keeps a request's referrer across redirects. So a typed
-			// navigation sends no Referer on any hop. Until this, each hop sent
-			// the URL that redirected (#70 asked for that, but Chrome doesn't).
+			// The next hop's Referer is this request's Referer with the
+			// referrer policy applied again for the new URL. Chrome, Firefox
+			// and WebKit all do this; Fetch's main fetch runs "determine
+			// request's referrer" on every hop. It is never the URL that issued
+			// the 3xx: a page whose fetch() is redirected names the page on
+			// both hops, and a typed navigation that redirects sends no Referer
+			// on either. Each hop starts from what the hop before it sent, so a
+			// Referer trimmed to its origin stays trimmed and one dropped on an
+			// https->http hop stays dropped, even when the chain comes back to
+			// where it started. The caller's spelling of the name is kept.
 			//
-			// A Sec-Fetch-Site the caller set starts the chain, and from there
-			// only grows less trusting: "none" stays "none", and a hop that
-			// leaves the referrer's site makes it cross-site for the rest of the
-			// chain. Without one the transport picks the value on each hop as
-			// on the first request.
-			//
-			// The copied Referer (either casing) is dropped first so none goes
-			// out twice. DisableRedirectReferer suppresses the hop's Referer but
-			// not that delete: the caller's own names the page the chain
-			// started from, which is what they asked not to send.
-			chain, inChain := ctx.Value(redirectChainKey{}).(redirectChain)
-			if !inChain {
-				chain.referer = headerValueFold(req.Headers, "Referer")
-				chain.site = strings.ToLower(headerValueFold(req.Headers, "Sec-Fetch-Site"))
-			}
-			for k := range newReq.Headers {
-				if strings.EqualFold(k, "Referer") {
-					delete(newReq.Headers, k)
-				}
-			}
-			if chain.site != "" {
-				if chain.site != "none" && chain.referer != "" {
-					if rel := fetchSiteRelation(chain.referer, redirectURL); fetchSiteRank(rel) > fetchSiteRank(chain.site) {
-						chain.site = rel
-					}
-				}
-				for k := range newReq.Headers {
-					if strings.EqualFold(k, "Sec-Fetch-Site") {
-						newReq.Headers[k] = []string{chain.site}
-					}
-				}
-			}
-			ctx = context.WithValue(ctx, redirectChainKey{}, chain)
-			if !req.DisableRedirectReferer {
-				if ref := chainReferer(chain.referer, redirectURL); ref != "" {
-					newReq.Headers["Referer"] = []string{ref}
+			// DisableRedirectReferer sends no Referer on any hop, including one
+			// the caller set on the original request: carrying that forward
+			// would hand the new host exactly what the caller asked us not to
+			// send.
+			if key, ref := refererHeader(req.Headers); key != "" && !req.DisableRedirectReferer {
+				if next := redirectReferer(ref, redirectURL); next != "" {
+					newReq.Headers[key] = []string{next}
 				}
 			}
 
@@ -2103,13 +2090,13 @@ func (s *Session) PostStream(ctx context.Context, url string, body []byte, heade
 // parseOrigin returns (scheme, host, port) for origin comparison. Missing
 // ports are filled in with the scheme default so http://x:80 and http://x
 // compare equal. Returned values are lowercased.
-// sameOriginReferer returns the previous URL as Chrome puts it in the Referer
-// header on a same-origin hop: the full URL minus the fragment and any userinfo
+// sameOriginReferer returns a Referer URL as Chrome puts it in the header on a
+// same-origin hop: the full URL minus the fragment and any userinfo
 // (credentials), with a redundant default port dropped. Chrome never leaks the
 // fragment or credentials in Referer, and serializes the document URL with the
 // default port omitted (https://h:443/a -> https://h/a).
-func sameOriginReferer(prevURL string) string {
-	u, err := url.Parse(prevURL)
+func sameOriginReferer(referrer string) string {
+	u, err := url.Parse(referrer)
 	if err != nil {
 		return ""
 	}
@@ -2146,100 +2133,97 @@ func parseOrigin(urlStr string) (scheme, host, port string) {
 	return scheme, host, port
 }
 
-// redirectChainKey carries a redirect chain's referrer and Sec-Fetch-Site
-// from one hop to the next, on the context requestWithRedirects passes down.
-type redirectChainKey struct{}
-
-type redirectChain struct {
-	referer string // the Referer the chain's first request carried
-	site    string // the caller's Sec-Fetch-Site, as it stands for the hop before
-}
-
-// headerValueFold returns the first value of name in h, in any spelling.
-func headerValueFold(h map[string][]string, name string) string {
-	for k, v := range h {
-		if strings.EqualFold(k, name) && len(v) > 0 {
-			return v[0]
-		}
-	}
-	return ""
-}
-
-// fetchSiteRank orders Sec-Fetch-Site values from most to least trusting.
-func fetchSiteRank(v string) int {
-	switch v {
-	case "same-origin":
-		return 1
-	case "same-site":
-		return 2
-	case "cross-site":
-		return 3
-	}
-	return 0
-}
-
-// fetchSiteRelation is the Sec-Fetch-Site a request to target gets from a page
-// at referrer: same-origin, same-site (same scheme and registrable domain,
-// any port), or cross-site.
-func fetchSiteRelation(referrer, target string) string {
-	if sameOrigin(referrer, target) {
-		return "same-origin"
-	}
-	rs, rh, _ := parseOrigin(referrer)
-	ts, th, _ := parseOrigin(target)
-	if rs != "" && rs == ts && rh != "" && registrableDomain(rh) == registrableDomain(th) {
-		return "same-site"
-	}
-	return "cross-site"
-}
-
-// registrableDomain approximates eTLD+1 with the last two labels, as the
-// client package's Sec-Fetch-Site detection does. An IP literal is its own site.
-func registrableDomain(host string) string {
-	if net.ParseIP(strings.Trim(host, "[]")) != nil {
-		return host
-	}
-	parts := strings.Split(host, ".")
-	if len(parts) <= 2 {
-		return host
-	}
-	return strings.Join(parts[len(parts)-2:], ".")
-}
-
-// chainReferer returns the Referer a redirect hop to target sends for a chain
-// whose first request carried referrer: "" with none, or from https to http,
-// and otherwise redirectReferer's strict-origin-when-cross-origin form of it
-// for target.
-func chainReferer(referrer, target string) string {
-	if referrer == "" {
+// redirectReferer returns the Referer to send on the next redirect hop: the
+// Referer the current hop carried, with Chrome's default
+// strict-origin-when-cross-origin policy applied again for nextURL. Returns ""
+// when the next hop should carry none.
+//   - an https Referer going to a non-https URL: none
+//   - nextURL on the Referer's own origin: the Referer as it was, minus any
+//     fragment and credentials
+//   - any other origin: the Referer's ORIGIN only, serialized with a trailing
+//     slash (e.g. "https://example.com/")
+//   - a Referer that is not an http or https URL: none, as a browser never
+//     sends one it cannot parse
+//
+// Both checks look at the Referer, not at the URL that issued the 3xx, and
+// referrer is what the current hop actually sent, which is how Chrome, Firefox
+// and WebKit carry it. So a Referer trimmed on one hop stays trimmed, and one
+// dropped on a downgrade stays dropped.
+func redirectReferer(referrer, nextURL string) string {
+	scheme, host, port := parseOrigin(referrer)
+	if (scheme != "http" && scheme != "https") || host == "" {
 		return ""
 	}
-	return redirectReferer(referrer, isSchemeDowngrade(referrer, target), !sameOrigin(referrer, target))
-}
-
-// redirectReferer returns the Referer value to send on the next redirect hop,
-// following Chrome's default strict-origin-when-cross-origin policy. prevURL is
-// the URL that issued the 3xx. Returns "" when no Referer should be sent.
-//   - https -> http downgrade: omit (no Referer)
-//   - same-origin: the full previous URL
-//   - cross-origin (same secure scheme): the previous URL's ORIGIN only,
-//     serialized with a trailing slash (e.g. "https://example.com/")
-func redirectReferer(prevURL string, schemeDowngrade, crossOrigin bool) string {
-	if schemeDowngrade {
+	if isSchemeDowngrade(referrer, nextURL) {
 		return ""
 	}
-	if !crossOrigin {
-		return sameOriginReferer(prevURL)
+	if sameOrigin(referrer, nextURL) {
+		return sameOriginReferer(referrer)
 	}
-	scheme, host, port := parseOrigin(prevURL)
-	if scheme == "" || host == "" {
-		return ""
+	if strings.Contains(host, ":") { // IPv6 literal needs brackets
+		host = "[" + host + "]"
 	}
 	origin := scheme + "://" + host
 	if !((scheme == "https" && port == "443") || (scheme == "http" && port == "80")) {
 		origin += ":" + port
 	}
 	return origin + "/"
+}
+
+// exactHeadersForHop returns the exact header pairs for the next redirect hop.
+// A Referer pair is carried the way the Referer header is (see
+// redirectReferer): its value is worked out again for nextURL in the pair's
+// own slot and spelling, and the pair is left out when the hop should carry
+// none, which disableReferer makes every hop. Every other pair goes as given,
+// none is ever added, and exact is not modified.
+//
+// ok is false when leaving the Referer out would leave no pairs at all.
+func exactHeadersForHop(exact []fingerprint.HeaderPair, nextURL string, disableReferer bool) (hop []fingerprint.HeaderPair, ok bool) {
+	var out []fingerprint.HeaderPair // nil until a Referer pair is found
+	for i, hp := range exact {
+		if !strings.EqualFold(hp.Key, "Referer") {
+			if out != nil {
+				out = append(out, hp)
+			}
+			continue
+		}
+		if out == nil {
+			out = append(make([]fingerprint.HeaderPair, 0, len(exact)), exact[:i]...)
+		}
+		if disableReferer {
+			continue
+		}
+		if v := redirectReferer(hp.Value, nextURL); v != "" {
+			out = append(out, fingerprint.HeaderPair{Key: hp.Key, Value: v})
+		}
+	}
+	if out == nil {
+		return exact, true
+	}
+	return out, len(out) > 0
+}
+
+// refererHeader returns the name under which h holds a Referer, as the caller
+// spelled it, and its first value. The name is "" when h has none. Should a
+// caller have set it under two spellings, the canonical one wins, then the
+// lowest, so the choice does not change with map iteration order.
+func refererHeader(h map[string][]string) (key, value string) {
+	if v, ok := h["Referer"]; ok {
+		key = "Referer"
+		if len(v) > 0 {
+			value = v[0]
+		}
+		return key, value
+	}
+	for k, v := range h {
+		if strings.EqualFold(k, "Referer") && (key == "" || k < key) {
+			key, value = k, ""
+			if len(v) > 0 {
+				value = v[0]
+			}
+		}
+	}
+	return key, value
 }
 
 // sameOrigin reports whether two URLs share scheme+host+port.
@@ -2252,10 +2236,10 @@ func sameOrigin(a, b string) bool {
 	return as == bs && ah == bh && ap == bp
 }
 
-// isSchemeDowngrade reports whether the redirect is https → http.
-// Chrome's default strict-origin-when-cross-origin referrer policy strips
-// Referer entirely on such downgrades, and Fetch semantics strip any
-// Authorization that was set on the original request.
+// isSchemeDowngrade reports whether going from one URL to the other is
+// https → http. Fetch semantics strip any Authorization on such a redirect,
+// and Chrome's default strict-origin-when-cross-origin referrer policy sends
+// no Referer when the Referer is https and the destination is not.
 func isSchemeDowngrade(from, to string) bool {
 	fs, _, _ := parseOrigin(from)
 	ts, _, _ := parseOrigin(to)

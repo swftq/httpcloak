@@ -197,6 +197,12 @@ type Request struct {
 	// caller headers. Connection is not: a capture that carries none cannot
 	// have one added back, and HTTP/1.1 keeps the connection alive by default
 	// anyway. List it yourself to send it.
+	//
+	// A followed redirect sends the same pairs on every hop, except that a
+	// Referer pair is carried the way a browser carries the header. It stays in
+	// its slot and spelling, is cut to its origin when the hop leaves that
+	// origin, and is left out after an https to http downgrade or when
+	// DisableRedirectReferer is set. A list without one never gains one.
 	ExactHeaders []fingerprint.HeaderPair
 	Body         io.Reader // Streaming body for uploads
 	Timeout      time.Duration
@@ -250,16 +256,19 @@ type Request struct {
 	// platform-version, bitness, model, wow64) for this single request.
 	DisableHighEntropyClientHints bool
 
-	// DisableRedirectReferer, when true, stops a Referer being added on redirect
-	// hops. By default httpcloak synthesises one per Chrome's default
-	// strict-origin-when-cross-origin policy: the full previous URL same-origin,
-	// the origin alone cross-origin, and nothing at all on an https to http
-	// downgrade. That is what a browser does, so leave this off unless you are
-	// mirroring a client that sends no Referer.
+	// DisableRedirectReferer, when true, stops the request's Referer being
+	// carried onto redirect hops. By default each hop carries the Referer of the
+	// hop before it, with Chrome's default strict-origin-when-cross-origin
+	// policy applied again for the new URL. It is kept as it is while the hop
+	// stays on the Referer's origin, cut to that origin when the hop leaves it,
+	// and dropped after an https to http downgrade. A request sent without a
+	// Referer sends none on its hops either. That is what Chrome and Firefox do,
+	// so leave this off unless you are mirroring a client that sends no Referer
+	// on a redirect.
 	//
-	// When set, no Referer reaches the next hop at all, including one you set on
-	// the original request, since forwarding that would leak the pre-redirect URL
-	// to the new host.
+	// When set, no Referer reaches any hop after the first, including one you
+	// set on the original request, since forwarding that would hand the new
+	// host what you asked not to send.
 	DisableRedirectReferer bool
 
 	// HeaderOrder, when non-empty, sets the header order for this single request

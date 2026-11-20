@@ -365,9 +365,11 @@ export interface RequestOptions {
   disableHighEntropyClientHints?: boolean;
 
   /**
-   * Per-request opt-out of the Referer a redirect hop carries, which is the
-   * first request's own Referer re-applied for the hop's URL. When true no
-   * Referer goes out on any hop, including one the caller set.
+   * Per-request opt-out of the Referer httpcloak carries onto redirect hops.
+   * By default each hop carries the request's Referer as a browser does, per
+   * Chrome's strict-origin-when-cross-origin policy. When true no Referer
+   * reaches any hop after the first, including one the caller set themselves;
+   * the original request still sends it.
    */
   disableRedirectReferer?: boolean;
 
