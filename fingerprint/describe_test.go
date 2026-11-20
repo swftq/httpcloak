@@ -545,6 +545,66 @@ func TestDescribe_CustomRegistryRoundTrip(t *testing.T) {
 	}
 }
 
+// The hpack_representation overrides survive describe.
+//
+// They did not. flattenHTTP2 never wrote the map, so a preset that carried one
+// came back from a describe and reload on its bare policy. No built-in preset
+// had a map, so TestDescribeRoundTripsEveryPreset could not see it; a custom
+// preset such as the curl mirror, whose one override is {"authorization":
+// "never"}, lost exactly the entry that makes it curl. safari-26 is the
+// built-in case: its four overrides are what make its HPACK Safari's.
+func TestDescribe_HPACKRepresentationRoundTrips(t *testing.T) {
+	const custom = "describe-rep-never"
+	p, err := LoadAndBuildPresetFromJSON([]byte(`{"version":1,"preset":{"name":"` + custom +
+		`","based_on":"chrome-latest","http2":{"hpack_representation":{"authorization":"never"}}}}`))
+	if err != nil {
+		t.Fatalf("load %s: %v", custom, err)
+	}
+	Register(custom, p)
+	defer Unregister(custom)
+
+	for _, c := range []struct {
+		name string
+		want map[string]string
+	}{
+		{custom, map[string]string{"authorization": "never"}},
+		{"safari-26", map[string]string{":method": "incremental", ":protocol": "incremental",
+			"content-length": "without", "cookie": "never"}},
+	} {
+		out, err := Describe(c.name)
+		if err != nil {
+			t.Fatalf("%s: describe: %v", c.name, err)
+		}
+		pf, err := LoadPresetFromJSON([]byte(out))
+		if err != nil {
+			t.Fatalf("%s: parse: %v", c.name, err)
+		}
+		if pf.Preset.HTTP2 == nil {
+			t.Fatalf("%s: describe wrote no http2 section", c.name)
+		}
+		if got := pf.Preset.HTTP2.HPACKRepresentation; !reflect.DeepEqual(got, c.want) {
+			t.Errorf("%s: describe wrote hpack_representation %v, want %v", c.name, got, c.want)
+		}
+		rt, err := BuildPreset(pf.Preset)
+		if err != nil {
+			t.Fatalf("%s: build: %v", c.name, err)
+		}
+		if got := rt.H2HPACKRepresentation(); !reflect.DeepEqual(got, c.want) {
+			t.Errorf("%s: H2HPACKRepresentation() = %v after a describe and reload, want %v",
+				c.name, got, c.want)
+		}
+	}
+
+	// A preset without overrides writes no key, so its describe is unchanged.
+	out, err := Describe("chrome-latest")
+	if err != nil {
+		t.Fatalf("chrome-latest: describe: %v", err)
+	}
+	if strings.Contains(out, `"hpack_representation"`) {
+		t.Errorf("chrome-latest has no representation overrides, but describe wrote hpack_representation")
+	}
+}
+
 // The signature_algorithms override survives describe.
 //
 // It did not. flattenTLS emitted neither the TCP list nor the QUIC one, so

@@ -183,6 +183,10 @@ type hpackInstr struct {
 	ValueHuff bool
 	Size      uint64 // TABLE_SIZE_UPDATE only
 	First     byte   // first byte of the instruction
+	// Prefix is the instruction's leading integer as encoded: the
+	// representation bits with the index, e.g. 1f 11 for a never-indexed
+	// literal on name 32.
+	Prefix []byte
 }
 
 func hpackVarint(b []byte, pos int, n uint8) (uint64, int, error) {
@@ -234,7 +238,8 @@ func parseHPACK(t *testing.T, block []byte) []hpackInstr {
 	staticNames := map[uint64]string{
 		1: ":authority", 2: ":method", 3: ":method", 4: ":path", 5: ":path",
 		6: ":scheme", 7: ":scheme", 16: "accept-encoding", 17: "accept-language",
-		19: "accept", 23: "authorization", 32: "cookie", 58: "user-agent",
+		19: "accept", 23: "authorization", 28: "content-length", 32: "cookie",
+		58: "user-agent",
 	}
 
 	var out []hpackInstr
@@ -247,8 +252,10 @@ func parseHPACK(t *testing.T, block []byte) []hpackInstr {
 			if err != nil {
 				t.Fatalf("malformed INDEXED at %d: %v", pos, err)
 			}
+			lead := block[pos:np]
 			pos = np
-			out = append(out, hpackInstr{Kind: "INDEXED", NameIndex: idx, Name: staticNames[idx], First: first})
+			out = append(out, hpackInstr{Kind: "INDEXED", NameIndex: idx, Name: staticNames[idx], First: first,
+				Prefix: lead})
 
 		case first&0xE0 == 0x20:
 			sz, np, err := hpackVarint(block, pos, 5)
@@ -273,6 +280,7 @@ func parseHPACK(t *testing.T, block []byte) []hpackInstr {
 			if err != nil {
 				t.Fatalf("malformed literal at %d: %v", pos, err)
 			}
+			lead := block[pos:np]
 			pos = np
 			if nameIdx == 0 {
 				if _, pos, err = hpackSkipString(block, pos); err != nil {
@@ -286,7 +294,7 @@ func parseHPACK(t *testing.T, block []byte) []hpackInstr {
 			pos = np2
 			out = append(out, hpackInstr{
 				Kind: kind, NameIndex: nameIdx, Name: staticNames[nameIdx],
-				ValueHuff: vh, First: first,
+				ValueHuff: vh, First: first, Prefix: lead,
 			})
 		}
 	}
@@ -312,10 +320,16 @@ func countInstr(ins []hpackInstr, kind string) int {
 	return n
 }
 
-// drive issues requests on one session, i.e. one connection.
+// drive issues requests on one chrome-latest session, i.e. one connection.
 func drive(t *testing.T, h *hpackWireServer, want int, reqs func(tr *Transport, base string)) [][]byte {
 	t.Helper()
-	tr := NewTransport("chrome-latest")
+	return driveAs(t, h, "chrome-latest", want, reqs)
+}
+
+// driveAs is drive on the given preset.
+func driveAs(t *testing.T, h *hpackWireServer, preset string, want int, reqs func(tr *Transport, base string)) [][]byte {
+	t.Helper()
+	tr := NewTransport(preset)
 	tr.SetProtocol(ProtocolHTTP2)
 	tr.SetInsecureSkipVerify(true)
 	defer tr.Close()
@@ -449,9 +463,13 @@ func TestHPACKMethodUsesNameIndex2(t *testing.T) {
 }
 
 // Cookie crumbs are regular headers, so Chrome indexes each one: 0x60,
-// literal with incremental indexing, name index 32. The never-indexed form
-// (0x1f11) is one no browser emits, and because such a field is never inserted
-// the entire jar is re-sent in full on every request.
+// literal with incremental indexing, name index 32. Chrome never emits the
+// never-indexed form (0x1f11), and because such a field is never inserted the
+// entire jar would be re-sent in full on every request. Others do use it:
+// Safari 26.3 on every crumb of a capture whose 1059 crumbs were all 11 to 14
+// bytes, and so the WebKit 26 presets on every crumb
+// (hpack_webkit_wire_test.go), and Firefox 159 and nghttp2 on every crumb
+// under 20 bytes. This test is about chrome-latest only.
 //
 // Chrome: 1181 B, then 39 B, then 35 B. The jar collapses to one byte a crumb.
 func TestHPACKCookieCrumbsAreIndexed(t *testing.T) {
@@ -497,7 +515,7 @@ func TestHPACKCookieCrumbsAreIndexed(t *testing.T) {
 		}
 	}
 	if never > 0 {
-		t.Errorf("%d cookie crumbs used the never-indexed representation (0x1f11). No browser "+
+		t.Errorf("%d cookie crumbs used the never-indexed representation (0x1f11). Chrome never "+
 			"emits it, and a never-indexed field is never inserted, so the whole jar is re-sent "+
 			"on every request", never)
 	}
