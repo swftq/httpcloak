@@ -366,7 +366,8 @@ DATA len=7
           "key": "accept-language",
           "value": "en-US,en;q=0.9"
         }
-      ]
+      ],
+      "full_encoding_over_http": "never"
     },
     "protocols": {
       "http3": true

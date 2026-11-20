@@ -637,7 +637,8 @@ DATA len=7
           "value": "u=0, i"
         }
       ],
-      "image_accept": "image/jxl,image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8"
+      "image_accept": "image/jxl,image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+      "full_encoding_over_http": "loopback"
     },
     "client_hints": {
       "full_version_list": "\"Google Chrome\";v=\"155.0.8059.39\", \"Chromium\";v=\"155.0.8059.39\", \"Not(A:Brand\";v=\"24.0.0.0\""

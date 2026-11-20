@@ -85,7 +85,14 @@ type Preset struct {
 
 	// ImageAccept is the Accept header Chrome sends on image loads. Empty
 	// means the pre-155 value; see ResolveImageAccept.
-	ImageAccept    string
+	ImageAccept string
+
+	// FullEncodingOverHTTP says which plain-HTTP requests still carry the
+	// preset's own Accept-Encoding; the others send PlainHTTPAcceptEncoding.
+	// One of the FullEncoding* values. Empty derives it from the User-Agent;
+	// see ResolveFullEncodingOverHTTP.
+	FullEncodingOverHTTP string
+
 	ClientHints    ClientHintsProfile // High-entropy UA client hint overrides; empty fields are derived from sec-ch-ua (see Preset.ResolveClientHints)
 	HTTP2Settings  HTTP2Settings
 	TCPFingerprint TCPFingerprint
