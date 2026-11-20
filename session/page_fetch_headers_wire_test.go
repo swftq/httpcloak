@@ -41,10 +41,17 @@ var pageFetchProtocols = []struct{ name, proto string }{{"HTTP/1.1", "HTTP/1.1"}
 type pageFetchHit struct {
 	proto                        string
 	site, origin, mode, referers []string
+	refused                      bool // by pageFetchCSRF, on a path under /csrf/
 }
 
+// pageFetchCSRF is Go 1.25+'s CSRF check. It refuses a request other than GET,
+// HEAD or OPTIONS whose Sec-Fetch-Site is neither same-origin nor none, or,
+// with no Sec-Fetch-Site, whose Origin names another host.
+var pageFetchCSRF = http.NewCrossOriginProtection()
+
 // pageFetchServer records every request by path. A path /hop/<status>/... that
-// ends in /1 answers with that status and a Location ending in /2 instead.
+// ends in /1 answers with that status and a Location ending in /2 instead. A
+// path under /csrf/ answers 403 to a request pageFetchCSRF refuses.
 type pageFetchServer struct {
 	url  string // scheme://host:port of the server under the name requests use
 	port string
@@ -73,6 +80,7 @@ func newPageFetchServer(t *testing.T, host string, secure bool) *pageFetchServer
 
 func (s *pageFetchServer) serve(w http.ResponseWriter, r *http.Request) {
 	io.Copy(io.Discard, r.Body)
+	refused := strings.HasPrefix(r.URL.Path, "/csrf/") && pageFetchCSRF.Check(r) != nil
 	s.mu.Lock()
 	s.hits[r.URL.Path] = append(s.hits[r.URL.Path], pageFetchHit{
 		proto:    r.Proto,
@@ -80,8 +88,13 @@ func (s *pageFetchServer) serve(w http.ResponseWriter, r *http.Request) {
 		origin:   r.Header.Values("Origin"),
 		mode:     r.Header.Values("Sec-Fetch-Mode"),
 		referers: r.Header.Values("Referer"),
+		refused:  refused,
 	})
 	s.mu.Unlock()
+	if refused {
+		http.Error(w, "cross-origin request refused", http.StatusForbidden)
+		return
+	}
 	if rest, ok := strings.CutPrefix(r.URL.Path, "/hop/"); ok && strings.HasSuffix(rest, "/1") {
 		status, _ := strconv.Atoi(rest[:strings.IndexByte(rest, '/')])
 		w.Header().Set("Location", strings.TrimSuffix(r.URL.Path, "1")+"2")
@@ -164,7 +177,7 @@ func TestPageFetchHeadersFollowTheReferer(t *testing.T) {
 	pages := []struct {
 		name, referer, site, origin string
 	}{
-		{"no Referer", "", "", ""}, // site "": none for a navigation, cross-site otherwise
+		{"no Referer", "", "", ""}, // the mode decides; see below
 		{"same origin", srv.url + "/app/page.html?q=1", "same-origin", srv.url},
 		{"same site", "https://sub.a.test:" + srv.port + "/", "same-site", "https://sub.a.test:" + srv.port},
 		{"other port", "https://a.test:" + otherPort + "/", "same-site", "https://a.test:" + otherPort},
@@ -192,9 +205,14 @@ func TestPageFetchHeadersFollowTheReferer(t *testing.T) {
 						t.Fatalf("%s: went out over %s", what, h.proto)
 					}
 					wantValues(t, what, "Sec-Fetch-Mode", h.mode, shape.mode)
-					site := page.site
+					// With no Referer, a cors request's page is the URL's own
+					// origin, and any other mode keeps the preset's site: none
+					// for a navigation, cross-site for no-cors.
+					site, pageOrigin := page.site, page.origin
 					switch {
-					case site != "":
+					case page.referer != "":
+					case shape.mode == "cors":
+						site, pageOrigin = "same-origin", srv.url
 					case shape.mode == "navigate":
 						site = "none"
 					default:
@@ -204,8 +222,8 @@ func TestPageFetchHeadersFollowTheReferer(t *testing.T) {
 					// Fetch's rule: any method but GET or HEAD carries the
 					// page's origin, and so does a cors GET off that origin.
 					var origin []string
-					if page.referer != "" && (shape.method == "POST" || shape.mode == "cors" && page.origin != srv.url) {
-						origin = []string{page.origin}
+					if pageOrigin != "" && (shape.method == "POST" || shape.mode == "cors" && pageOrigin != srv.url) {
+						origin = []string{pageOrigin}
 					}
 					wantValues(t, what, "Origin", h.origin, origin...)
 				}
@@ -287,6 +305,7 @@ func TestPageFetchHeadersOnAStream(t *testing.T) {
 			}{
 				{"fetch", map[string][]string{"Referer": {"https://b.test/"}, "Accept": {"application/json"}}, "cross-site", []string{"https://b.test"}},
 				{"navigation", map[string][]string{"Referer": {srv.url + "/app/"}}, "same-origin", nil},
+				{"no-page-fetch", map[string][]string{"Accept": {"application/json"}}, "same-origin", nil},
 			} {
 				what := preset + ", " + p.name + ", " + c.name
 				path := "/stream/" + preset + "/" + p.proto + "/" + c.name

@@ -3,11 +3,12 @@ package session
 import "github.com/sardanioss/httpcloak/transport"
 
 // pinPageFetchHeaders writes into req's headers the Sec-Fetch-Site and Origin
-// that the page its Referer names implies, where the transport then reads them
-// as the caller's own; see transport.PageFetchHeaders. A Referer used to
-// change neither, so a navigation went out with Sec-Fetch-Site: none beside
-// it and a request sniffed as fetch() with cross-site and no Origin, whatever
-// the page.
+// that the page its Referer names implies, or for a cors request that names
+// none its own URL's origin, where the transport then reads them as the
+// caller's own; see transport.PageFetchHeaders. A Referer used to change
+// neither, so a navigation went out with Sec-Fetch-Site: none beside it and a
+// request sniffed as fetch() with cross-site and no Origin, whatever the page,
+// or with no page at all.
 //
 // It runs once, on the request the caller made, before the first attempt. A
 // redirect hop must not work them out again from its own Referer: a browser
