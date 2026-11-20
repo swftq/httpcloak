@@ -192,7 +192,8 @@ if errors.Is(err, httpcloak.ErrTooManyRedirects) {
 A `Location` that does not parse, such as one with an invalid `%` escape
 (`/bad%zz`), is not one of them. The session fails the request with an
 `invalid redirect Location` error that wraps the `*url.Error`, and returns no
-response. Nothing is sent for the hop, as in Chrome and Firefox.
+response. Nothing is sent for the hop. Chrome and Firefox send such a path as
+written, which the library cannot carry, so it stops rather than send another.
 
 An error returned from your own `OnRedirect` callback comes back unwrapped, so
 `errors.Is` against your own sentinel matches what you returned.

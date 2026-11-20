@@ -223,8 +223,9 @@ func TestRedirectLocation(t *testing.T) {
 				}
 
 				// A Location that does not parse fails the request before
-				// OnRedirect is asked and before anything is sent, as the fetch()
-				// failed in both browsers. It used to reach OnRedirect as given and
+				// OnRedirect is asked and before anything is sent, rather than
+				// going out as another path: browsers send it as written, which
+				// net/url cannot carry. It used to reach OnRedirect as given and
 				// then fail in the transport.
 				for i, bad := range []string{"/bad%zz?x=17", a.url + "/bad%zz?x=17"} {
 					from := fmt.Sprintf("/dir/sub/page?case=bad%d", i)

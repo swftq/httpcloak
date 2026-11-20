@@ -2623,8 +2623,10 @@ func isHTTPS(u string) bool {
 // percent-encoded as both browsers encode it; see encodeSpecialQuery.
 //
 // A reference net/url cannot parse, such as an invalid %-escape in the path
-// (/bad%zz), is an error: both browsers sent no request for one. URL-standard
-// quirks beyond this, such as reading a backslash as a slash, are not applied.
+// (/bad%zz), is an error. Browsers send such a path as written, which net/url
+// cannot carry, so the caller gets an error rather than a request for another
+// path. URL-standard quirks beyond this, such as reading a backslash as a
+// slash, are not applied.
 func resolveURL(base, ref string) (string, error) {
 	b, err := url.Parse(base)
 	if err != nil {

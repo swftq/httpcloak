@@ -147,10 +147,17 @@ func DecodeParams(query string) (map[string]string, error) {
 	return params, nil
 }
 
-// JoinURL resolves path, an absolute or relative reference such as a
-// Location header, against base, as RFC 3986 section 5 does. A query or
-// fragment in path is kept as one; this used to put them into the path,
-// where "/next?q=1" went out as "/next%3Fq=1".
+// JoinURL resolves path against base by RFC 3986 reference resolution, as a
+// browser resolves a redirect's Location. A relative reference keeps its query
+// and fragment, dot segments are removed, "?q" replaces only base's query, and
+// "//host/x" takes base's scheme. The query is then percent-encoded as a
+// browser encodes it; see encodeSpecialQuery. URL-standard quirks beyond that,
+// such as reading a backslash as a slash, are not applied.
+//
+// An empty path returns base unchanged. A base net/url cannot parse is joined
+// to path with a slash. A path it cannot parse, such as one with a stray "%",
+// is taken as a path on base's origin rather than handed back as something
+// relative that cannot be dialled.
 func JoinURL(base, path string) string {
 	if path == "" {
 		return base
@@ -159,19 +166,58 @@ func JoinURL(base, path string) string {
 	if err != nil {
 		return base + "/" + strings.TrimPrefix(path, "/")
 	}
-	ref, err := url.Parse(path)
-	if err != nil {
-		// Not a valid reference, such as one with a stray "%". Take it as a
-		// path on base's origin, as before, rather than hand back something
-		// relative that cannot be dialled.
-		if strings.HasPrefix(path, "http://") || strings.HasPrefix(path, "https://") {
-			return path
-		}
-		if !strings.HasPrefix(path, "/") {
-			path = "/" + path
-		}
-		parsed.Path, parsed.RawPath, parsed.RawQuery, parsed.Fragment = path, "", "", ""
-		return parsed.String()
+	if u, err := resolveReference(parsed, path); err == nil {
+		return u.String()
 	}
-	return parsed.ResolveReference(ref).String()
+	if strings.HasPrefix(path, "http://") || strings.HasPrefix(path, "https://") {
+		return path
+	}
+	if !strings.HasPrefix(path, "/") {
+		path = "/" + path
+	}
+	parsed.Path, parsed.RawPath, parsed.RawQuery, parsed.Fragment = path, "", "", ""
+	return parsed.String()
+}
+
+// resolveReference is JoinURL's resolution of a reference net/url can parse.
+func resolveReference(base *url.URL, ref string) (*url.URL, error) {
+	u, err := base.Parse(ref)
+	if err != nil {
+		return nil, err
+	}
+	u.RawQuery = encodeSpecialQuery(u.RawQuery)
+	return u, nil
+}
+
+// encodeSpecialQuery percent-encodes the bytes of an http(s) URL's query that
+// fall in the URL standard's special-query percent-encode set: C0 controls,
+// space, ", #, <, >, ' and every byte above ~. Chrome 156 and Firefox 159 both
+// encoded a Location's query this way, and left %XX escapes alone, valid or
+// not. net/url keeps a query byte for byte, so a raw space from a server would
+// otherwise split the HTTP/1.1 request line.
+func encodeSpecialQuery(q string) string {
+	n := 0
+	for i := 0; i < len(q); i++ {
+		if inSpecialQuerySet(q[i]) {
+			n++
+		}
+	}
+	if n == 0 {
+		return q
+	}
+	const hex = "0123456789ABCDEF"
+	b := make([]byte, 0, len(q)+2*n)
+	for i := 0; i < len(q); i++ {
+		c := q[i]
+		if inSpecialQuerySet(c) {
+			b = append(b, '%', hex[c>>4], hex[c&15])
+		} else {
+			b = append(b, c)
+		}
+	}
+	return string(b)
+}
+
+func inSpecialQuerySet(c byte) bool {
+	return c <= ' ' || c > '~' || c == '"' || c == '#' || c == '<' || c == '>' || c == '\''
 }

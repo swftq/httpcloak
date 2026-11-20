@@ -107,7 +107,7 @@ func (s *Session) Warmup(ctx context.Context, url string) error {
 
 // parseSubresources tokenizes HTML and extracts subresource URLs, resolved
 // against baseURL as a browser resolves them (see resolveURL). A URL that does
-// not parse is skipped: Chrome and Firefox sent no request for one.
+// not parse is skipped, since net/url cannot carry it as written.
 func parseSubresources(body []byte, baseURL string) []subresource {
 	tokenizer := html.NewTokenizer(strings.NewReader(string(body)))
 	seen := make(map[string]bool)

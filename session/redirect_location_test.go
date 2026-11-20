@@ -66,8 +66,9 @@ func TestResolveURL(t *testing.T) {
 		})
 	}
 
-	// An invalid %-escape in the path does not parse. Both browsers failed
-	// the fetch, and loaded no img, script or stylesheet, without a request.
+	// An invalid %-escape in the path does not parse. Chrome and Firefox send
+	// such a path as written, which net/url cannot carry, so it is an error
+	// rather than another path.
 	for _, ref := range []string{"/bad%zz?x=17", "https://a.test/bad%zz?x=17"} {
 		if got, err := resolveURL(base, ref); err == nil {
 			t.Errorf("resolveURL(%q) = %q, want an error", ref, got)

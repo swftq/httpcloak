@@ -129,7 +129,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   Both now use RFC 3986 reference resolution through `net/url`, then encode the query the browsers' way, for every preset over HTTP/1.1 and HTTP/2. `OnRedirect`'s `To` and `FinalURL` name the resolved URL. The root package's `Session` and every binding take this path.
 
-  A `Location` that does not parse, such as `/bad%zz`, now fails the request before `OnRedirect` is asked and before anything is sent. The error says `invalid redirect Location` and wraps the `*url.Error`, and no response comes with it. Both browsers failed that fetch without a request. The session used to pass the raw string to `OnRedirect` as `To`, then fail in the transport with `parse_url`. `Warmup` skips such a URL, as both browsers did for an `img`, a `script` and a stylesheet. It sent nothing for one before either.
+  A `Location` that does not parse, such as `/bad%zz`, now fails the request before `OnRedirect` is asked and before anything is sent. The error says `invalid redirect Location` and wraps the `*url.Error`, and no response comes with it. Chrome and Firefox send such a path as written, which `net/url` cannot carry, so the session stops rather than send another path. It used to pass the raw string to `OnRedirect` as `To`, then fail in the transport with `parse_url`. `Warmup` skips such a URL, and sent nothing for one before either.
+
+- **`client.Client` encodes a redirect's query the way a browser does**: `client.Client` resolves a redirect's `Location` by RFC 3986 since 1.7.4, which is where Chrome 156 and Firefox 159 sent each root-relative, path-relative, `..`, query-only, protocol-relative and absolute target captured. The query still went out byte for byte. The root package's `Client`, which wraps `client.Client`, gets the same fix.
+
+  The hop's query is now percent-encoded as both browsers encoded it, with the URL standard's special-query set. A space, `"`, `'`, `<`, `>`, a control character or a non-ASCII byte becomes `%XX`, and existing `%XX` escapes are left alone. A raw space in a `Location`'s query used to go into the HTTP/1.1 request line as it was, splitting it (`GET /sp?q=a b HTTP/1.1`). A `Location` that cannot be parsed, such as `/bad%zz`, is followed as 1.7.4 follows it, on the base's origin with the path escaped.
+
+  `JoinURL` itself encodes its result's query the same way. Everything else about it is as in 1.7.4.
 
 ## [1.7.4] - 2026-11-15
 

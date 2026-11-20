@@ -1289,7 +1289,7 @@ func (c *Client) doOnce(ctx context.Context, req *Request, redirectHistory []*Re
 				return nil, fmt.Errorf("redirect response missing Location header")
 			}
 
-			// Resolve relative URL
+			// Resolve the Location against this request's URL; see JoinURL.
 			redirectURL := JoinURL(reqURL, location)
 
 			// Determine new method based on redirect code
