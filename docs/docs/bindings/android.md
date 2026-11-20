@@ -87,6 +87,8 @@ val r = session.request(
 
 Shorthands cover the common cases: `get`, `post`, `put`, `patch`, `delete`, `head` and `options`, each taking the URL, headers, query parameters and (where it applies) a body.
 
+`fetchMode` overrides the auto-detected `Sec-Fetch-Mode` and `Sec-Fetch-Dest`; to a plain `http://` host that isn't loopback neither goes on the wire, as in a browser, and the mode only shapes the request. A session with `tlsOnly` or a custom `ja3` sends them as set.
+
 `exactHeaders` replaces the header pipeline entirely: the pairs go out in the given order and casing, a name may repeat, and nothing else is added.
 
 ### Bodies

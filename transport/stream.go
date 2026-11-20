@@ -445,6 +445,7 @@ func (t *Transport) doStreamHTTP1(ctx context.Context, req *Request) (*StreamRes
 
 	mergeCallerHeaders(httpReq, req, "h1")
 	stripH1Priority(httpReq, req, snap.preset, effectiveTLSOnly)
+	stripUntrustworthyMetadata(httpReq, req, t.wireHeaders(snap.preset), effectiveTLSOnly)
 
 	// Record timing before request
 	reqStart := time.Now()
@@ -545,6 +546,7 @@ func (t *Transport) doStreamHTTP2(ctx context.Context, req *Request) (*StreamRes
 	applyPresetHeaders(httpReq, t.wireHeaders(snap.preset), t.effectiveHeaderOrder(req), t.getCustomPseudoOrder(), effectiveTLSOnly, "h2", req.Headers, req.DisableClientHints, req.ExactHeaders, shapeOf(req))
 
 	mergeCallerHeaders(httpReq, req, "h2")
+	stripUntrustworthyMetadata(httpReq, req, t.wireHeaders(snap.preset), effectiveTLSOnly)
 
 	// Record timing before request
 	reqStart := time.Now()
@@ -652,6 +654,7 @@ func (t *Transport) doStreamHTTP3(ctx context.Context, req *Request) (*StreamRes
 	applyPresetHeaders(httpReq, t.wireHeaders(snap.preset), t.effectiveHeaderOrder(req), t.getCustomPseudoOrder(), effectiveTLSOnly, "h3", req.Headers, req.DisableClientHints, req.ExactHeaders, shapeOf(req))
 
 	mergeCallerHeaders(httpReq, req, "h3")
+	stripUntrustworthyMetadata(httpReq, req, t.wireHeaders(snap.preset), effectiveTLSOnly)
 
 	// Record timing before request
 	reqStart := time.Now()
