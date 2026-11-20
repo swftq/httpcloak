@@ -138,7 +138,11 @@ func (ro *redirectOriginClient) originFor(u, method string) (origin string, ok b
 //
 // The page is the Referer's origin. Without a Referer the request names no
 // page, so only a cors or websocket request guesses one, the target's own
-// origin, which is what client.Client has always sent there.
+// origin. A cors request then goes out same-origin (see
+// detectSecFetchSiteForMode) and carries Origin only with a method other than
+// GET or HEAD, as Chrome 156 and Firefox 159 sent it from a page that sends no
+// Referer; one whose Sec-Fetch-Site the caller set elsewhere keeps the
+// target's origin, as before.
 func requestOriginClient(httpReq *http.Request, preset *fingerprint.Preset, mode FetchMode, reqURL string) (origin string, ok bool) {
 	wireMode := strings.ToLower(httpReq.Header.Get("Sec-Fetch-Mode"))
 	if wireMode == "" {
@@ -153,7 +157,14 @@ func requestOriginClient(httpReq *http.Request, preset *fingerprint.Preset, mode
 	}
 	page := serializeOriginClient(httpReq.Header.Get("Referer"))
 	if page == "" {
-		if wireMode == "cors" || wireMode == "websocket" {
+		switch wireMode {
+		case "cors":
+			m := strings.ToUpper(httpReq.Method)
+			if strings.EqualFold(httpReq.Header.Get("Sec-Fetch-Site"), "same-origin") && (m == "" || m == "GET" || m == "HEAD") {
+				return "", false
+			}
+			return serializeOriginClient(reqURL), true
+		case "websocket":
 			return serializeOriginClient(reqURL), true
 		}
 		return "", false
