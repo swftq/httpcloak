@@ -141,6 +141,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   Both now follow the `Referer` the request sends: the header's when there is one, an empty one included, and the field's otherwise. A redirect hop still repeats the first request's `Sec-Fetch-Site` and `Origin`, so it now repeats the corrected values. The root package's `Client` has no `Referer` field and passes `Headers` through, so every `Referer` its callers set went the broken way, and it gets the same fix. `Session` and the bindings are unchanged; a `Referer` given to a session request does not set its `Sec-Fetch-Site`.
 
+- **`client.Client` carries the request's own `Referer` onto a redirect hop**: the `client` package follows redirects in its own loop, and each hop repeated the first request's `Referer`, unchanged on every origin. A request sent with no `Referer` sent the first URL of the chain on every hop instead, a typed navigation among them. The hop set its own `Referer` to the URL that redirected. But it was built from the request's headers, which by then held a copy of every header the request had sent, so that copy won wherever there was one. Chrome 156 and Firefox 159 were captured on redirected `fetch()`, XHR, iframe and form POST requests, and WebKit's source was read. All three start each hop from the `Referer` the hop before it sent, and send none when it had none.
+
+  Each hop now applies the default `strict-origin-when-cross-origin` policy again for its new URL, the rule the session's redirect path follows. The `Referer` goes unchanged while the hop stays on its origin and is cut to that origin when the hop leaves. Once cut it stays cut, even where the chain comes back to the page's origin. With `WithTLSOnly`, a `Referer` header follows the same rule; it used to go out verbatim on every hop. The root package's `Client`, which wraps `client.Client`, gets the same fix. `Response.Request.Referer` now names what the last hop sent, not the URL that redirected to it.
+
 ## [1.7.4] - 2026-11-15
 
 ### Added
