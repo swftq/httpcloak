@@ -22,6 +22,7 @@ import (
 	"github.com/sardanioss/httpcloak/dns"
 	"github.com/sardanioss/httpcloak/fingerprint"
 	"github.com/sardanioss/httpcloak/internal/compress"
+	"github.com/sardanioss/httpcloak/internal/engine"
 	"github.com/sardanioss/httpcloak/internal/gunzip"
 	"github.com/sardanioss/httpcloak/internal/secfetch"
 	"github.com/sardanioss/httpcloak/internal/site"
@@ -3341,6 +3342,21 @@ func applyPresetHeaders(httpReq *http.Request, wire *presetWireHeaders, customHe
 			delete(httpReq.Header, "Sec-Fetch-User")
 		}
 
+		// WebKit adds Upgrade-Insecure-Requests: 1 to the load of a document or
+		// an iframe whose URL is not https, and to nothing else
+		// (CachedResourceLoader::requestResource), so its presets, captured
+		// over https, leave it out of their header set. Chrome's and Firefox's
+		// sets carry it for every navigation (firefox-133's has none, a
+		// separate defect) and are left alone. Sec-Fetch-Mode and -Dest are
+		// final here, except that the caller's own, merged after this, win; a
+		// caller's own Upgrade-Insecure-Requests is left alone. The order is
+		// chosen below, so it places this one like any other header. A
+		// redirect hop is a request of its own and goes by its own URL.
+		if strings.EqualFold(httpReq.URL.Scheme, "http") && engine.Of(preset.UserAgent) == engine.WebKit &&
+			headerVal(userHeaders, "Upgrade-Insecure-Requests") == "" && navigatesDocumentOrIframe(httpReq.Header, userHeaders) {
+			httpReq.Header["Upgrade-Insecure-Requests"] = []string{"1"}
+		}
+
 		// Per-resource-type priority: HTTP header. Chrome 147+ desktop emits
 		// a distinct urgency per sec-fetch-dest (style→u=0, script→u=1,
 		// manifest→u=2, image→u=2/i, fetch→u=1/i, prefetch→u=4/i, …). Presets
@@ -3556,6 +3572,19 @@ func headerVal(h map[string][]string, name string) string {
 		}
 	}
 	return ""
+}
+
+// navigatesDocumentOrIframe reports whether a request goes out as the
+// navigation of a document or an iframe, the two destinations WebKit gives
+// Upgrade-Insecure-Requests: Sec-Fetch-Mode navigate and Sec-Fetch-Dest
+// document or iframe, the caller's value of each when they set one.
+func navigatesDocumentOrIframe(h http.Header, userHeaders map[string][]string) bool {
+	mode := cmp.Or(headerVal(userHeaders, "Sec-Fetch-Mode"), headerVal(h, "Sec-Fetch-Mode"))
+	if !strings.EqualFold(mode, "navigate") {
+		return false
+	}
+	dest := cmp.Or(headerVal(userHeaders, "Sec-Fetch-Dest"), headerVal(h, "Sec-Fetch-Dest"))
+	return strings.EqualFold(dest, "document") || strings.EqualFold(dest, "iframe")
 }
 
 func extractHost(urlStr string) string {
