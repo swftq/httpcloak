@@ -341,13 +341,55 @@ func buildSubresourceHeaders(preset *fingerprint.Preset, typ resourceType, pageU
 		"Sec-Fetch-Site": {secFetch.Site},
 		"Sec-Fetch-Mode": {secFetch.Mode},
 		"Sec-Fetch-Dest": {secFetch.Dest},
-		"Referer":        {pageURL},
+	}
+	if ref := subresourceReferer(pageURL, targetURL); ref != "" {
+		headers["Referer"] = []string{ref}
 	}
 	if priority != "" {
 		headers["Priority"] = []string{priority}
 	}
 
 	return headers
+}
+
+// subresourceReferer returns the Referer a page sends with a subresource load
+// under the default referrer policy, strict-origin-when-cross-origin, which
+// Chrome, Firefox and WebKit all apply to a page that sets none. Returns ""
+// when the load should carry none.
+//   - targetURL on the page's own origin: the page URL minus any fragment and
+//     credentials
+//   - any other origin, same-site or not: the page's ORIGIN only, serialized
+//     with a trailing slash (e.g. "https://example.com/")
+//   - an https page loading an http URL: none
+//
+// Warmup used to send the full page URL, fragment included, to every
+// subresource. From https://a.test:PORT/page?q=1#frag, Chrome 156 and Firefox
+// 159 load a stylesheet, script, image or font with
+// https://a.test:PORT/page?q=1 on a.test and https://a.test:PORT/ on
+// sub.a.test and b.test; WebKit's SecurityPolicy::generateReferrerHeader gives
+// the same under its default. Neither browser sends an https page's http load
+// at all (an image goes upgraded to https), so that case is the policy's
+// answer, not a capture. redirectReferer applies the same rule to a redirect
+// hop.
+func subresourceReferer(pageURL, targetURL string) string {
+	scheme, host, port := parseOrigin(pageURL)
+	if (scheme != "http" && scheme != "https") || host == "" {
+		return ""
+	}
+	if isSchemeDowngrade(pageURL, targetURL) {
+		return ""
+	}
+	if sameOrigin(pageURL, targetURL) {
+		return sameOriginReferer(pageURL)
+	}
+	if strings.Contains(host, ":") { // IPv6 literal needs brackets
+		host = "[" + host + "]"
+	}
+	origin := scheme + "://" + host
+	if !((scheme == "https" && port == "443") || (scheme == "http" && port == "80")) {
+		origin += ":" + port
+	}
+	return origin + "/"
 }
 
 // interBatchDelay waits a random duration between min and max milliseconds,

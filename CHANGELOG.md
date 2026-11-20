@@ -86,6 +86,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   With `ExactHeaders`, a `Referer` pair now follows the same rule in its own slot and spelling. It used to go out verbatim on every hop, after an https to http downgrade and with `DisableRedirectReferer` too, because the session's hop `Referer` never reaches the wire in that mode. A list with no `Referer` pair still gains none. If the hop must drop a `Referer` that is the only pair, the list would be left empty, and an empty list means no exact mode at all. The session returns the 3xx with an error there instead of sending the preset's headers.
 
+- **Session warmup sends each subresource the `Referer` a browser sends**: every stylesheet, script, image and font went out with the full page URL as its `Referer`, fragment included, whatever origin it was on. A page that sets no referrer policy gets the default, `strict-origin-when-cross-origin`, and Chrome 156 and Firefox 159 captures of all four kinds follow it. From `https://a.test/page?q=1#frag`, the page's own origin gets `https://a.test/page?q=1`. Any other origin gets only `https://a.test/`, same-site (`sub.a.test`) or not (`b.test`). An http page follows the same rule. WebKit's source gives the same under its default, so the Safari and iOS presets take the rule too. This is the warmup in `Session` and in every binding, over HTTP/1.1, HTTP/2 and HTTP/3.
+
+  An https page's `http://` subresource now goes out with no `Referer`, as a redirect from https to http already does. Warmup still fetches it, where Chrome and Firefox do not: they block an http stylesheet, script or font on an https page, and upgrade an http image to https.
+
 ## [1.7.4] - 2026-11-15
 
 ### Added
