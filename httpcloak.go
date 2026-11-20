@@ -332,9 +332,11 @@ type Request struct {
 	//
 	// It is not called for a 3xx with no Location, because there is no hop to
 	// veto, nor for the hop that would exceed the redirect cap, which fails with
-	// ErrTooManyRedirects instead. DoStream does not follow redirects at all, so
-	// it never fires there. It runs on the calling goroutine between hops, so it
-	// must not block and must not re-enter the same session.
+	// ErrTooManyRedirects instead. On a Session it is not called for a Location
+	// that does not parse either, which fails the request. DoStream does not
+	// follow redirects at all, so it never fires there. It runs on the calling
+	// goroutine between hops, so it must not block and must not re-enter the
+	// same session.
 	OnRedirect func(*Redirect) error
 
 	// Initiator names the page API the request stands for: InitiatorFetch for

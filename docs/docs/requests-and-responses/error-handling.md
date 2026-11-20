@@ -189,6 +189,11 @@ if errors.Is(err, httpcloak.ErrTooManyRedirects) {
 | `ErrTooManyRedirects` | The chain exceeded the cap. `client.Client` returns the same sentinel but no response: at the point it detects the cap it has not built one. |
 | `ErrBodyNotReplayable` | A 307 or 308 needed the request body a second time, but it was a one-shot stream with no `Request.GetBody` to re-open it. The hop is refused rather than sent with an empty body. See [Redirects](/reference/options#bodies-on-307-and-308). |
 
+A `Location` that does not parse, such as one with an invalid `%` escape
+(`/bad%zz`), is not one of them. The session fails the request with an
+`invalid redirect Location` error that wraps the `*url.Error`, and returns no
+response. Nothing is sent for the hop, as in Chrome and Firefox.
+
 An error returned from your own `OnRedirect` callback comes back unwrapped, so
 `errors.Is` against your own sentinel matches what you returned.
 
