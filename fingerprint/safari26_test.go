@@ -103,15 +103,19 @@ func TestSafari26Presets(t *testing.T) {
 // name that turned up most, right before it on 259 of the 288. Chrome on iOS
 // runs on the same WebKit, so its presets from 148 on carry the same table.
 //
-// Every order a WebKit 26 preset hands the transport must therefore end that
-// way, whatever the destination, and name connection once. Nothing may land
-// after it either, so the body's headers, Transfer-Encoding and the marker for
-// the caller's own headers come before accept-language. A redirect hop gets
-// the early-referer table when a preset has one and the usual order otherwise,
-// so H2HeaderOrderFor and the two optional tables cover every order
-// HeaderOrderFor returns. Those two must at least end accept-encoding, cookie,
-// connection: the one redirect hop Safari was seen sending, a WebSocket
-// handshake's after a 302, moved Accept-Language and Priority into the middle.
+// These presets' session and transport requests take their order from
+// CFNetworkHeaderOrder, whose tail is that one; the transport and session
+// HTTP/1.1 tail tests check it on the wire. Their tables still order every
+// client.Client request, and describe and h2build read them, so every order
+// the tables give must end that way too, whatever the destination, and name
+// connection once. Nothing may land after it either, so the body's headers,
+// Transfer-Encoding and the marker for the caller's own headers come before
+// accept-language. A redirect hop gets the early-referer table when a preset
+// has one and the usual order otherwise, so H2HeaderOrderFor and the two
+// optional tables cover every order HeaderOrderFor returns. Those two must at
+// least end accept-encoding, cookie, connection: the one redirect hop Safari
+// was seen sending, a WebSocket handshake's after a 302, moved Accept-Language
+// and Priority into the middle.
 func TestWebKit26OrdersEndLikeSafari(t *testing.T) {
 	tail := []string{"accept-language", "priority", "accept-encoding", "cookie", "connection"}
 	early := []string{"content-type", "content-length", "transfer-encoding", "origin", OtherHeaders}

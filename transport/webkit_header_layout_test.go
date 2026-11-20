@@ -193,15 +193,25 @@ func (c *layoutCapture) do(t *testing.T, preset, proto, what string, req *Reques
 // navigation order the presets always sent (the plain fetch() GET and the bare
 // GET). Any other header moves it into an order they never sent before
 // header_order_model, even as the sixth (the CORS GET with an Origin).
+//
+// The HTTP/1.1 capture is plain HTTP, where the transport gives a WebKit
+// navigation Upgrade-Insecure-Requests. The bare GET carries it there, right
+// after User-Agent, where Safari 26.3 sent it on its own http:// navigation
+// (run-20261031-234946 h1.log:2-14).
 func TestWebKitHeaderLayoutOnTheWire(t *testing.T) {
 	c := newLayoutCapture(t)
 	for _, preset := range []string{"safari-26", "safari-26-ios"} {
 		for _, proto := range []string{"h2", "h1"} {
 			for _, sh := range layoutShapes() {
 				got, values := c.send(t, preset, proto, sh)
-				if !slices.Equal(got, sh.want) {
+				want := sh.want
+				if proto == "h1" && sh.name == "bare GET" {
+					want = layoutWant([]string{"sec-fetch-dest", "user-agent", "upgrade-insecure-requests", "accept",
+						"sec-fetch-site", "sec-fetch-mode"}, false)
+				}
+				if !slices.Equal(got, want) {
 					t.Errorf("%s %s, %s:\n got %s\nwant %s", preset, proto, sh.name,
-						strings.Join(got, ", "), strings.Join(sh.want, ", "))
+						strings.Join(got, ", "), strings.Join(want, ", "))
 				}
 				// A beacon's own values are the caller's to set; the layout
 				// only gives them their places.
@@ -333,10 +343,19 @@ func TestOtherPresetsKeepTheirListedOrder(t *testing.T) {
 
 // listedOrder puts names in the order a listed preset gives them: the ones
 // order names first, in its order, then the others sorted, with an unlisted
-// content-length after everything, where both encoders write it.
+// content-length after everything, where both encoders write it. When order
+// carries fingerprint.OtherHeaders, the sorted others go where it stands, as
+// CompleteHeaderOrder puts them.
 func listedOrder(order, names []string) []string {
 	var out, rest []string
+	marker := -1
 	for _, n := range order {
+		if n == fingerprint.OtherHeaders {
+			if marker < 0 {
+				marker = len(out)
+			}
+			continue
+		}
 		if slices.Contains(names, n) && !slices.Contains(out, n) {
 			out = append(out, n)
 		}
@@ -352,7 +371,11 @@ func listedOrder(order, names []string) []string {
 		}
 	}
 	slices.Sort(rest)
-	out = append(out, rest...)
+	if marker >= 0 {
+		out = slices.Insert(out, marker, rest...)
+	} else {
+		out = append(out, rest...)
+	}
 	if unlistedLength {
 		out = append(out, "content-length")
 	}

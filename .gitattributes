@@ -1,2 +1,6 @@
 bindings/clib/exports_gen.c text eol=lf
 bindings/clib/httpcloak_api.h text eol=lf
+
+# The wire goldens are compared byte for byte against output built with "\n",
+# so a CRLF checkout fails every one of them. Keep them LF on every platform.
+*.golden text eol=lf
