@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+
+	"github.com/sardanioss/httpcloak/internal/site"
 )
 
 // FetchMode represents the Sec-Fetch-Mode header value
@@ -159,12 +161,14 @@ func calculateFetchSite(referrer, targetURL string) FetchSite {
 		return FetchSiteCrossSite
 	}
 
-	// Same origin: same scheme, host, and port
-	if refURL.Scheme == targURL.Scheme && refURL.Host == targURL.Host {
+	// Same origin: same scheme, host, and port, the way a browser's URL parser
+	// leaves them, so host case and a default port written out make no
+	// difference
+	if site.SameOrigin(refURL, targURL) {
 		return FetchSiteSameOrigin
 	}
 
-	// Same site: same registrable domain (simplified check)
+	// Same site: same scheme and registrable domain
 	refDomain := getRegistrableDomain(refURL.Host)
 	targDomain := getRegistrableDomain(targURL.Host)
 	if refDomain == targDomain && refURL.Scheme == targURL.Scheme {
@@ -174,20 +178,12 @@ func calculateFetchSite(referrer, targetURL string) FetchSite {
 	return FetchSiteCrossSite
 }
 
-// getRegistrableDomain extracts the registrable domain (simplified)
+// getRegistrableDomain extracts the registrable domain of a URL's host, which
+// may carry a port, by the public suffix list; see site.RegistrableDomain.
+// Taking the last two labels put every .co.uk site on one site with every
+// other, and every IPv4 address ending in the same two octets with each other.
 func getRegistrableDomain(host string) string {
-	// Remove port if present
-	if idx := strings.LastIndex(host, ":"); idx != -1 {
-		host = host[:idx]
-	}
-
-	parts := strings.Split(host, ".")
-	if len(parts) >= 2 {
-		// Simple heuristic: use last two parts
-		// This doesn't handle all public suffix cases but works for most
-		return strings.Join(parts[len(parts)-2:], ".")
-	}
-	return host
+	return site.RegistrableDomain((&url.URL{Host: host}).Hostname())
 }
 
 // SecFetchHeaders generates coherent Sec-Fetch-* headers based on context

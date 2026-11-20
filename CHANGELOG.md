@@ -73,6 +73,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **`client.Client.Prepare` shows the headers its request is sent with**: `Prepare` started from the preset's header map, which holds the navigation set, and the fetch-mode helpers only add to what they find. So on a prepared `fetch()` or subresource load (a JSON POST, `FetchModeCORS` or `FetchModeNoCors`), `GetAllHeaders` and `GetHeader` showed `Sec-Fetch-User: ?1` and `Upgrade-Insecure-Requests: 1` beside `Sec-Fetch-Mode: cors` or `no-cors`, plus `TE: trailers` on Firefox presets, and with `WithTLSOnly` they showed the preset's whole browser set. None of it was sent: `Send` goes through `Do`, which never used the map, so only the prepared request was wrong. `Prepare` now builds the headers the way `Do` does, and on every preset the prepared request matches what `Do` sends for a navigation, a form or JSON POST, a `cors` request and `no-cors` script, image and style loads.
 
+- **`Sec-Fetch-Site` tells same-site from cross-site by the public suffix list**: `client.Client` and session warmup each guessed a host's registrable domain, and got different sites wrong:
+  - `client.Client` took any second-level label of three characters or fewer for part of the suffix. So `edition.cnn.com` with a `Referer` on `www.cnn.com` went out `cross-site`, and so did `api.x.com` from `x.com` and `sub.a.test` from `a.test`.
+  - Warmup took a host's last two labels. So its subresources went out `same-site` from any `.co.uk` site to any other, and between IPv4 addresses that end in the same two octets.
+  - Both put `a.github.io` and `b.github.io` on one site.
+
+  Chrome's site is the scheme plus the registrable domain from the public suffix list, private suffixes such as `github.io` included. A TLD the list doesn't know takes its last label as the suffix, and an IP address, `localhost` or a public suffix itself is a site of its own. Firefox's source agrees. Both paths now work sites out that way, through one shared helper, and the `fingerprint` request contexts (`XHRContext`, `ImageContext` and the rest) with them. The same-origin check also ignores the host's case and a default port written out, as a browser's URL parser does: a `Referer` on `https://WWW.EXAMPLE.COM/` used to make a request to `https://www.example.com/` `cross-site`. One rule covers every preset. WebKit reads the list from CFNetwork, which could not be checked here, so how Safari treats a TLD the list doesn't know is unverified.
+
 ## [1.7.4] - 2026-11-15
 
 ### Added

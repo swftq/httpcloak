@@ -91,7 +91,7 @@ The constructors:
 - `StyleContext(referrer, targetURL)`: a subresource `<link rel=stylesheet>` load. Mode `no-cors`, dest `style`.
 - `FontContext(referrer, targetURL)`: a `@font-face` load. Mode `cors`, dest `font`.
 
-`Site` is filled in by `calculateFetchSite(referrer, targetURL)` under the hood. Empty referrer gives `none`. Same scheme + host + port gives `same-origin`. Same registrable domain (last two labels of the host) gives `same-site`. Anything else is `cross-site`. The registrable-domain check is a two-label heuristic, not a full Public Suffix List walk, so multi-label public suffixes (`co.uk`, `com.au`) classify as `same-site` when the second-to-last labels match. For practical scraping work the heuristic is fine; if you need PSL-correct behaviour, set `Site` yourself.
+`Site` is filled in by `calculateFetchSite(referrer, targetURL)` under the hood. Empty referrer gives `none`. Same scheme + host + port gives `same-origin`, with the host's case and a default port written out (`:443`) making no difference, as in a browser. Same scheme + registrable domain gives `same-site`, whatever the ports. Anything else is `cross-site`. The registrable domain comes from the Public Suffix List, private suffixes included, the way Chrome works out a site: `www.example.co.uk` and `cdn.example.co.uk` are one site, while `example.co.uk` and `other.co.uk` are two, and so are `a.github.io` and `b.github.io`. A name under a TLD the list doesn't know, such as `.test`, takes its last label as the suffix. An IP address, `localhost` or a public suffix itself is a site of its own.
 
 ## GenerateSecFetchHeaders
 
