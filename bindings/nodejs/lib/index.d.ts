@@ -1342,6 +1342,7 @@ export const Preset: {
   // Safari (desktop and mobile)
   SAFARI_LATEST: string;
   SAFARI_18: string;
+  SAFARI_26: string;
   SAFARI_17_IOS: string;
   SAFARI_18_IOS: string;
   SAFARI_26_IOS: string;

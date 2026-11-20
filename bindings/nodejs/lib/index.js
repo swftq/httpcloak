@@ -176,6 +176,7 @@ const Preset = {
   // Safari (desktop and mobile)
   SAFARI_LATEST: "safari-latest",
   SAFARI_18: "safari-18",
+  SAFARI_26: "safari-26",
   SAFARI_17_IOS: "safari-17-ios",
   SAFARI_18_IOS: "safari-18-ios",
   SAFARI_26_IOS: "safari-26-ios",

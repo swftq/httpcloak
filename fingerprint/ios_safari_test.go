@@ -18,7 +18,8 @@ func TestIOSSafari26LatestAliasesAndLegacyProfiles(t *testing.T) {
 			t.Errorf("%s claims HTTP/3 without a QUIC capture", name)
 		}
 	}
-	for _, name := range []string{"safari-18-ios", "ios-safari-18", "safari-18", "safari-latest"} {
+	// safari-latest names the desktop safari-26 now; see TestSafari26Presets.
+	for _, name := range []string{"safari-18-ios", "ios-safari-18", "safari-18"} {
 		p := GetStrict(name)
 		if !strings.Contains(p.UserAgent, "Version/18.0") || p.HTTP2Settings.ConnectionWindowUpdate != 10485760 {
 			t.Errorf("%s changed with the new iOS preset", name)
@@ -26,16 +27,13 @@ func TestIOSSafari26LatestAliasesAndLegacyProfiles(t *testing.T) {
 	}
 }
 
-// Safari 26 on iOS keeps its priority header on HTTP/2 but sends none on
-// HTTP/1.1, like every other preset on WebKit's network stack.
-func TestIOSSafari26SendsNoPriorityOverHTTP1(t *testing.T) {
+// Safari 26 on iOS sends its priority header on HTTP/1.1 as well as HTTP/2:
+// in the iOS 26.3.1 simulator, as with Safari 26.3 on macOS, every HTTP/1.1
+// request carried one. The iPhone capture is HTTP/2 only, so it cannot say.
+func TestIOSSafari26SendsPriorityOverHTTP1(t *testing.T) {
 	for _, name := range []string{"safari-26-ios", "ios-safari-26", "safari-latest-ios", "ios-safari-latest"} {
-		p := Get(name)
-		if p.SendsPriorityOverHTTP1() {
-			t.Errorf("%s sends priority on HTTP/1.1", name)
-		}
-		if p.Headers["Priority"] == "" {
-			t.Errorf("%s lost its priority header for HTTP/2", name)
+		if p := Get(name); !p.SendsPriorityOverHTTP1() {
+			t.Errorf("%s sends no priority on HTTP/1.1", name)
 		}
 	}
 }

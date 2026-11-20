@@ -45,6 +45,7 @@
     },
     "http2": {
       "connection_window_update": 10420225,
+      "stream_weight": 0,
       "settings_order": [
         2,
         3,
@@ -60,19 +61,58 @@
       "hpack_header_order": [
         "sec-fetch-dest",
         "user-agent",
+        "upgrade-insecure-requests",
         "accept",
+        "referer",
         "sec-fetch-site",
         "sec-fetch-mode",
         "accept-language",
         "priority",
         "accept-encoding",
-        "sec-fetch-user",
-        "referer",
         "cookie",
         "content-type",
         "content-length",
         "origin"
-      ]
+      ],
+      "priority_table": {
+        "document": {
+          "urgency": 0,
+          "incremental": true,
+          "emit_header": true
+        },
+        "iframe": {
+          "urgency": 0,
+          "incremental": true,
+          "emit_header": true
+        },
+        "style": {
+          "urgency": 1,
+          "incremental": true,
+          "emit_header": true
+        },
+        "script": {
+          "urgency": 1,
+          "incremental": true,
+          "emit_header": true
+        },
+        "font": {
+          "urgency": 3,
+          "incremental": true,
+          "emit_header": true
+        },
+        "empty": {
+          "urgency": 3,
+          "incremental": true,
+          "emit_header": true
+        },
+        "image": {
+          "urgency": 5,
+          "incremental": true,
+          "emit_header": true
+        }
+      },
+      "priority_over_http1": true,
+      "priority_always_urgency": true
     },
     "http3": {
       "quic_max_incoming_uni_streams": 8,

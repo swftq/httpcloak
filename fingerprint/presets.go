@@ -531,6 +531,11 @@ type H2FingerprintConfig struct {
 	// what Firefox sends. The HTTP/2 weight stays the "empty" entry's, as
 	// Firefox sends both at 22.
 	XHRPriorityHeader *string
+	// PriorityAlwaysUrgency writes u= in the priority header even at the
+	// default urgency, 3. WebKit does: Safari 26 sends "u=3, i" for a font
+	// or a fetch(). Chromium leaves the default out, and
+	// PriorityHeaderFromResource follows Chromium.
+	PriorityAlwaysUrgency bool
 }
 
 // OtherHeaders, in a header order, marks the place for every header the order
@@ -993,7 +998,22 @@ func (p *Preset) H2PriorityFor(dest string) (weight uint16, exclusive bool, head
 	// Exclusive is a property of the browser, not of the resource: Chromium
 	// sets it on every stream and Firefox on none. It used to be true here
 	// unconditionally, which gave Firefox presets Chromium's flag.
-	return weight, p.HTTP2Settings.StreamExclusive, PriorityHeaderFromResource(rp), true
+	return weight, p.HTTP2Settings.StreamExclusive, p.priorityHeader(rp), true
+}
+
+// priorityHeader renders rp's priority header the way the preset's browser
+// does. That is PriorityHeaderFromResource, Chromium's rule, unless the preset
+// writes the urgency even at its default; see
+// H2FingerprintConfig.PriorityAlwaysUrgency.
+func (p *Preset) priorityHeader(rp ResourcePriority) string {
+	if !rp.EmitHeader || p.H2Config == nil || !p.H2Config.PriorityAlwaysUrgency {
+		return PriorityHeaderFromResource(rp)
+	}
+	v := "u=" + uint8ToASCII(rp.Urgency)
+	if rp.Incremental {
+		v += ", i"
+	}
+	return v
 }
 
 // XHRPriorityHeader returns the priority header an XMLHttpRequest sends, and
@@ -3781,46 +3801,48 @@ func IOSSafari18() *Preset {
 	}
 }
 
-// IOSSafari26 returns the Safari 26 iOS HTTP/2 fingerprint, captured from
-// Safari 26.6.1 on 2026-10-19. The UA reports the frozen iPhone OS 18_7 value.
-// TLS stays HelloIOS_18: JA3 ecdf4f49dd59effc439639da29186671 and Peetprint
-// 62b834de729e78a9f0ebd1dd099314a7 already match. See the sanitized capture
-// in testdata/safari-26-ios-capture.json. Locale remains the library's en-US
-// default; the capture's en-AU preference is a caller override.
+// Safari26 returns Safari 26 on macOS.
+//
+// CAPTURED from Safari 26.3 (21623.2.7.11.6) on macOS 26.3, against a server
+// that logs HTTP/1.1 as sent and every HTTP/2 frame. The ClientHello is
+// safari-18's, so the JSON is a delta on it: the ClientHello hashes to JA3
+// ecdf4f49dd59effc439639da29186671 and the HTTP/2 layer to Akamai
+// c52879e43202aeb92740be6e8c86ea96, both what chrome-155-ios measured on an
+// iPhone, because Chrome on iOS runs on the same WebKit.
+//
+// What moved from 18: SETTINGS 2,3,4,9 with no MAX_FRAME_SIZE, a connection
+// window of 10420225, the pseudo-header order m,s,a,p, no priority fields on
+// any HEADERS frame, and a header order led by sec-fetch-dest and user-agent.
+// Every request carries a priority header, on HTTP/1.1 as well, always
+// incremental: u=0 for documents and frames, u=1 for stylesheets and scripts,
+// u=3 for fonts and fetch(), u=5 for images. An async script goes at u=3,
+// which a per-dest table cannot tell from a parser-blocking one. No request
+// carried Sec-Fetch-User, which WebKit does not implement, and HTTPS
+// navigations carried no Upgrade-Insecure-Requests. The HTTP/3 and QUIC
+// values are 18's, unmeasured for 26.
+func Safari26() *Preset {
+	if p := LookupCustom("safari-26"); p != nil {
+		return p
+	}
+	return Safari18()
+}
+
+// IOSSafari26 returns Safari 26 on iOS.
+//
+// CAPTURED from the iOS 26.3.1 simulator (iPhone 17 Pro) the same way as
+// Safari26, with the same results apart from the User-Agent, which reports
+// iPhone OS 18_7. A Safari 26.6.1 iPhone capture, sanitized in
+// testdata/safari-26-ios-capture.json, agrees on the ClientHello (JA3
+// ecdf4f49dd59effc439639da29186671), the SETTINGS, the connection window, the
+// pseudo-header order, the absent HEADERS priority and a navigation's header
+// order, and the User-Agent carries its Version/26.6.1. That capture is
+// HTTP/2 only and has no QUIC, so HTTP/3 stays off by default; H3Config is
+// kept, so a caller who forces HTTP/3 still gets Safari's QUIC shape.
 func IOSSafari26() *Preset {
-	p := IOSSafari18()
-	p.Name = "safari-26-ios"
-	p.UserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.6.1 Mobile/15E148 Safari/604.1"
-	delete(p.Headers, "Sec-Fetch-User")
-	p.Headers["Accept-Encoding"] = "gzip, deflate, br, zstd"
-	p.Headers["Priority"] = "u=0, i"
-	p.HeaderOrder = []HeaderPair{
-		{"sec-fetch-dest", "document"}, {"user-agent", ""},
-		{"accept", p.Headers["Accept"]}, {"sec-fetch-site", "none"},
-		{"sec-fetch-mode", "navigate"}, {"accept-language", p.Headers["Accept-Language"]},
-		{"priority", "u=0, i"}, {"accept-encoding", p.Headers["Accept-Encoding"]},
+	if p := LookupCustom("safari-26-ios"); p != nil {
+		return p
 	}
-	p.HTTP2Settings.ConnectionWindowUpdate = 10420225
-	p.HTTP2Settings.MaxFrameSize = 0 // Do not advertise SETTINGS_MAX_FRAME_SIZE.
-	p.HTTP2Settings.StreamWeight = 0 // No legacy PRIORITY data on HEADERS.
-	p.H2Config = safariH2Config()
-	p.H2Config.SettingsOrder = []uint16{2, 3, 4, 9}
-	p.H2Config.PseudoHeaderOrder = []string{":method", ":scheme", ":authority", ":path"}
-	p.H2Config.HPACKHeaderOrder = []string{
-		"sec-fetch-dest", "user-agent", "accept", "sec-fetch-site", "sec-fetch-mode",
-		"accept-language", "priority", "accept-encoding",
-		"referer", "cookie", "content-type", "content-length", "origin",
-	}
-	// The capture is HTTP/2 only, so nothing says Safari puts priority on an
-	// HTTP/1.1 request, and safari-18-ios, which the iOS aliases named before,
-	// never sent one there. Same WebKit stack, same answer as iOS Chrome.
-	noH1Priority := false
-	p.H2Config.PriorityOverHTTP1 = &noH1Priority
-	// The capture is HTTP/2 only, so HTTP/3 stays off by default. H3Config is
-	// kept: a caller who forces HTTP/3 must still get Safari's QUIC shape,
-	// since a nil config falls back to Chrome's (the #125 mismatch).
-	p.SupportHTTP3 = false
-	return p
+	return IOSSafari18()
 }
 
 // AndroidChrome143 returns Chrome 143 on Android fingerprint preset
@@ -4132,6 +4154,7 @@ var presets = map[string]func() *Preset{
 	"firefox-148-linux":   Firefox148Linux,
 	"firefox-148-macos":   Firefox148macOS,
 	"safari-18":           Safari18,
+	"safari-26":           Safari26,
 	"chrome-143-ios":      IOSChrome143,
 	"chrome-144-ios":      IOSChrome144,
 	"chrome-145-ios":      IOSChrome145,
@@ -4218,7 +4241,7 @@ var presets = map[string]func() *Preset{
 	"firefox-latest-windows": Firefox148Windows,
 	"firefox-latest-linux":   Firefox148Linux,
 	"firefox-latest-macos":   Firefox148macOS,
-	"safari-latest":          Safari18,
+	"safari-latest":          Safari26,
 	"chrome-latest-ios":      IOSChrome155,
 	"safari-latest-ios":      IOSSafari26,
 	"chrome-latest-android":  AndroidChrome158,

@@ -50,7 +50,7 @@ Three more differences come with it, and a preset's `priority_model` (`chromium`
 
 - **Who decides the weight.** On the `chromium` model a request that sets its own `priority` header gets the weight that goes with that urgency, as Chrome does for a `fetch()` with a priority hint, and a request that carries none goes at urgency 3's weight, 147, the only urgency Chrome sends no header for. On the `table` model the weight always comes from the table entry, whatever header the request carries.
 - **Stream dependencies.** Chrome never names stream 0 as the parent once two requests overlap on a connection: each new stream depends, exclusively, on the newest open stream at the same or a higher priority, so the tree is one chain. The `chromium` model builds that chain. Firefox names stream 0, never exclusive, and so does the `table` model.
-- **HTTP/1.1.** Chrome sends no priority header over HTTP/1.1, and Firefox sends the same one it sends over HTTP/2. Chrome on iOS runs on WebKit and sends none there either. A preset can state this outright with `priority_over_http1`. On a preset that sends none, a `priority` you set yourself is dropped on HTTP/1.1 too, so the value meant for HTTP/2 does not leak when a request falls back. Exact-headers and TLS-only requests go out as you composed them.
+- **HTTP/1.1.** Chrome sends no priority header over HTTP/1.1, and Firefox sends the same one it sends over HTTP/2. So does WebKit 26: Safari 26 sends it there, and so do the Chrome on iOS presets from 148 on, which run on the same WebKit. Older iOS presets send none. A preset can state this outright with `priority_over_http1`. On a preset that sends none, a `priority` you set yourself is dropped on HTTP/1.1 too, so the value meant for HTTP/2 does not leak when a request falls back. Exact-headers and TLS-only requests go out as you composed them.
 
 Leave `priority_model` out and it is derived from `stream_exclusive`, which only Chromium sets. A table entry can also carry its own `weight` (1 to 256), which overrides the one derived from the urgency; that is how the Firefox table is written.
 
@@ -238,10 +238,12 @@ To turn per-resource priority off entirely on a preset (every request gets the s
 |---|---|---|---|
 | Chrome desktop and Android | weight from the urgency (256, 220, 183, ...), exclusive, chained onto the newest open stream at the same or a higher priority | HTTP/2 and HTTP/3, never HTTP/1.1 | Chrome's 14-destination table |
 | Firefox | weight from Firefox's table (42, 32, 22, 12), never exclusive, parent stream 0 | every protocol, HTTP/1.1 included | Firefox's table |
-| Safari, desktop and iOS | weight 255 on every request, never exclusive, parent stream 0 | none | none |
-| Chrome on iOS | weight 255 on every request, never exclusive, parent stream 0 | HTTP/2 and HTTP/3, never HTTP/1.1 | none |
+| Safari 26 and Chrome on iOS from 148 on (WebKit 26) | none | every protocol, HTTP/1.1 included, always with `u=` and `i` | Safari's 7-destination table |
+| Safari 17 and 18, and Chrome on iOS before 148 | weight 255 on every request, never exclusive, parent stream 0 | none | none |
 
-A custom preset inherits the 14-dest table for free unless you override it. Setting `http2.no_rfc7540_priorities: true` turns the table off and advertises `SETTINGS_NO_RFC7540_PRIORITIES`, the way Safari does; every request then goes at the static `stream_weight`.
+Safari 26 was measured on macOS 26.3 and in the iOS 26.3.1 simulator. It sends `u=0, i` for a document or an iframe, `u=1, i` for a stylesheet or a script, `u=3, i` for a font or a `fetch()` and `u=5, i` for an image, on HTTP/1.1, HTTP/2 and HTTP/3 alike. It writes the urgency even at the default, `u=3, i`, where Chrome would write just `i`, which is what `priority_always_urgency` in a preset says. An async script goes at `u=3, i`, which the table cannot tell from a blocking one, so set the header on the request for it.
+
+A custom preset inherits the 14-dest table for free unless you override it. Setting `http2.no_rfc7540_priorities: true` turns the inherited table off and advertises `SETTINGS_NO_RFC7540_PRIORITIES`, the way Safari does; every request then goes at the static `stream_weight`. A preset that sets it and brings a `priority_table` of its own, as Safari 26 does, sends that table's priority header and no priority fields on HEADERS at all.
 
 ## Why this matters
 

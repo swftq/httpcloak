@@ -235,7 +235,7 @@ Worth noting:
 - Inheritance is flattened. `chrome-155-windows` is internally based on `chrome-154-windows`, which is based on `chrome-153-windows`, and so on back to the Go-defined `chrome-146-windows`, but the describe output has no `based_on` field. Every value is emitted explicitly, so there's no chain to chase.
 - `tls.client_hello` says `chrome-146-windows`. That's the underlying utls ClientHelloID we use. Every later Chrome desktop preset builds on it, and the TLS changes since then sit on top as plain JSON fields: `signature_algorithms` (from 150), and `trust_anchors` (from 152, sorted from 154). Most versions in between only moved the User-Agent and sec-ch-ua values.
 - Every H2 SETTINGS value shows up, even the zero ones (`max_concurrent_streams: 0`, `max_frame_size: 0`). Zero means "don't emit this SETTINGS entry on the wire", and that information survives the round-trip.
-- The full RFC 7540 priority table lands under `http2.priority_table`. Chrome 147+ ships its real per-Sec-Fetch-Dest urgencies. Presets that opt out (Safari, iOS Chrome, iOS Safari) skip this block.
+- The full RFC 7540 priority table lands under `http2.priority_table`. Chrome 147+ ships its real per-Sec-Fetch-Dest urgencies. Presets that opt out (Safari 17 and 18, iOS Chrome before 148) skip this block. Safari 26 and iOS Chrome from 148 on carry WebKit 26's own table, which sets the priority header and nothing else.
 
 For the full schema with every field documented, see the [JSON Preset Spec](../reference/json-preset-spec).
 

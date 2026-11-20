@@ -65,10 +65,11 @@ The per-OS variants differ from their base in the User-Agent only. Firefox does 
 
 | Preset | Notes |
 |---|---|
-| `safari-18` (`safari-latest`) | Desktop macOS Safari 18, supports h3 |
+| `safari-26` (`safari-latest`) | Desktop macOS Safari 26, supports h3 |
+| `safari-18` | Desktop macOS Safari 18, supports h3 |
 | `safari-17-ios` (`ios-safari-17`) | iPhone Safari 17, h2 only |
 | `safari-18-ios` (`ios-safari-18`) | iPhone Safari 18, supports h3 |
-| `safari-26-ios` (`ios-safari-26`, `safari-latest-ios`, `ios-safari-latest`) | iPhone Safari 26 from a real capture, h2. h3 is off by default until there's a QUIC capture; forcing it still sends Safari's QUIC shape |
+| `safari-26-ios` (`ios-safari-26`, `safari-latest-ios`, `ios-safari-latest`) | iPhone Safari 26, from a simulator capture and a real iPhone capture, h2. h3 is off by default until there's a QUIC capture; forcing it still sends Safari's QUIC shape |
 
 Safari sets `NoRFC7540Priorities=true`, so it never emits the H2 PRIORITY frame, and RFC 9218 priority headers carry the signal instead. That's the single biggest tell that splits a Safari fingerprint from a Chrome one at the H2 layer, even though both ALPN as h2.
 

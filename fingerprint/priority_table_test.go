@@ -148,15 +148,14 @@ func TestH2HasPriorityTable_RFC7540Inheritance(t *testing.T) {
 	}
 	// Safari + iOS Chrome + iOS Safari all carry NoRFC7540Priorities=true.
 	// They emit no PRIORITY frame at all — the default table never
-	// applies to them.
+	// applies to them. WebKit 26 brings a table of its own, for its
+	// priority header, so Safari 26, iOS Chrome from 148 on and the -latest
+	// aliases are not in this list.
 	mustNotHave := []string{
 		"chrome-147-ios",
-		"chrome-148-ios",
 		"chrome-146-ios",
-		"safari-latest",
 		"safari-18",
-		"ios-safari-latest",
-		"ios-chrome-latest",
+		"safari-18-ios",
 		"ios-chrome-147",
 	}
 	for _, name := range mustHave {
@@ -285,7 +284,7 @@ func TestH2PriorityFor_UnknownDestFallsThrough(t *testing.T) {
 // because they don't emit the PRIORITY frame at all.
 func TestH2PriorityFor_NoRFC7540ReturnsFalse(t *testing.T) {
 	for _, name := range []string{
-		"safari-latest", "ios-chrome-latest", "ios-safari-latest", "chrome-148-ios",
+		"safari-18", "ios-chrome-147", "safari-18-ios", "chrome-147-ios",
 	} {
 		p := GetStrict(name)
 		if p == nil {
