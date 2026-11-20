@@ -298,6 +298,32 @@ func flattenHTTP2(p *Preset) *HTTP2Spec {
 	out.MaxHeaderListSize = &maxHeaderList
 	connWindow := s.ConnectionWindowUpdate
 	out.ConnectionWindowUpdate = &connWindow
+	// Only where a preset departs from the default, so one that opens its
+	// streams the usual way describes exactly as it did before. Both defaults
+	// are fixed rather than derived, which is what makes leaving them out
+	// round-trip safe.
+	if inc := p.H2StreamWindowUpdate(); inc != 0 {
+		out.StreamWindowUpdate = &inc
+	}
+	if id := p.H2FirstStreamID(); id != 1 {
+		out.FirstStreamID = &id
+	}
+	// Likewise only where a preset sets a rule, with every key written so a
+	// zero, such as Firefox's absent timer, reads as one. "" is written as
+	// the "read" it means.
+	if r := p.H2WindowRefresh(); r != nil {
+		creditOn := r.CreditOn
+		if creditOn == "" {
+			creditOn = CreditOnRead
+		}
+		out.WindowRefresh = &WindowRefreshSpec{
+			CreditOn:   creditOn,
+			AckAt:      r.AckAt,
+			Floor:      r.Floor,
+			IntervalMs: r.IntervalMs,
+			ReadBuffer: r.ReadBuffer,
+		}
+	}
 	streamWeight := s.StreamWeight
 	out.StreamWeight = &streamWeight
 	streamExcl := s.StreamExclusive
