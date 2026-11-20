@@ -93,11 +93,11 @@ Setting `Cookie: ""` doesn't suppress the merge. The lib treats an empty value a
 
 ## Cookie order matters for fingerprinting
 
-The order of cookies in the `Cookie` header is part of the client fingerprint. Real browsers sort consistently (longer path first, then by creation time, per RFC 6265), and httpcloak preserves whatever string you hand it byte-for-byte without re-sorting.
+The order of cookies in the `Cookie` header is part of the client fingerprint, and browsers differ on it. Chrome and Firefox put longer paths first, then sort by creation time, per RFC 6265; Safari sends the most recently stored cookie first. httpcloak preserves whatever string you hand it byte-for-byte without re-sorting.
 
 When hand-rolling cookies for a browser-shaped request, sort them yourself before attaching the header. Don't rely on `dict` iteration order in scripts, don't shuffle the order between requests on the same flow, and check that your sort matches the order the jar would have produced. Anti-bot vendors watch for cookie order drift between requests, and a mismatch on a long flow flags faster than most people expect.
 
-When the jar is on, this is a non-issue. The jar handles the sort and the order stays consistent across the session. Manual ordering only comes up when the `Cookie` header is being driven by hand.
+When the jar is on, this is a non-issue. The jar sorts the way the preset's browser does (see [Cookie Jar](./cookie-jar)) and the order stays consistent across the session. Manual ordering only comes up when the `Cookie` header is being driven by hand.
 
 ## When per-request beats the jar
 

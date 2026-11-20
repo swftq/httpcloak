@@ -19,6 +19,8 @@ sidebar_position: 4
 
 The file is UTF-8 JSON, parseable by any JSON library. Schema version is 5; v3 and v4 files still load. Top-level keys: `version`, `created_at`, `updated_at`, `config`, `cookies` (keyed by domain), `tls_sessions` (keyed by `h1:`/`h2:`/`h3:` plus origin), `ech_configs` (base64-encoded per host) and `accept_ch` (the client hints each host asked for in `Accept-CH`, keyed by host; absent from older files and from sessions that learned none).
 
+Each cookie carries `created_at` and `stored_at`, the times the jar orders the `Cookie` header by, so a loaded session sends its cookies in the order the saved one did. A file written before `stored_at` existed loads with `created_at` in its place.
+
 The file is written with `0600` permissions because it carries live session credentials. Don't commit these to git, don't ship them in cleartext, treat them like a password. People have uploaded these to public S3 buckets. Don't do that.
 
 ## Code

@@ -6,22 +6,72 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/sardanioss/httpcloak/fingerprint"
+	"github.com/sardanioss/httpcloak/internal/cookieorder"
 )
 
 // CookieJar stores cookies and provides thread-safe access
 type CookieJar struct {
 	mu      sync.RWMutex
-	cookies map[string][]*Cookie // domain -> cookies
+	cookies map[string][]storedCookie // domain -> cookies
+
+	// order is the Cookie header order of the preset's browser, and clock
+	// gives every store a time later than the one before. Both are guarded
+	// by mu.
+	order cookieorder.Order
+	clock cookieorder.Clock
 }
 
-// NewCookieJar creates a new empty cookie jar
+// storedCookie is a cookie in the jar with the times its order reads, the
+// first and the last store (internal/cookieorder). The times are the jar's
+// own: it never writes into the Cookie, which stays the caller's and can be
+// handed to several jars.
+type storedCookie struct {
+	*Cookie
+	created, stored time.Time
+}
+
+// NewCookieJar creates a new empty cookie jar. It orders cookies as RFC 6265
+// does; a Client's own jar takes the order of its preset's browser.
 func NewCookieJar() *CookieJar {
 	return &CookieJar{
-		cookies: make(map[string][]*Cookie),
+		cookies: make(map[string][]storedCookie),
 	}
 }
 
-// SetCookies adds cookies from Set-Cookie headers to the jar
+// newCookieJarFor creates an empty jar that orders cookies as the browser of
+// preset p does.
+func newCookieJarFor(p *fingerprint.Preset) *CookieJar {
+	j := NewCookieJar()
+	j.order = cookieOrderOf(p)
+	return j
+}
+
+// setOrder makes the jar order cookies as the browser of preset p does, for a
+// Client whose preset changed.
+func (j *CookieJar) setOrder(p *fingerprint.Preset) {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	j.order = cookieOrderOf(p)
+}
+
+// cookieOrderOf is the Cookie header order of the engine of p's User-Agent.
+func cookieOrderOf(p *fingerprint.Preset) cookieorder.Order {
+	if p == nil {
+		return cookieorder.RFC6265
+	}
+	return cookieorder.Of(p.UserAgent)
+}
+
+// orderKey is what the jar's order reads from the cookie.
+func (c storedCookie) orderKey() cookieorder.Key {
+	return cookieorder.Key{Name: c.Name, Domain: c.Domain, Path: c.Path, Created: c.created, Stored: c.stored}
+}
+
+// SetCookies adds cookies from Set-Cookie headers to the jar. One call is one
+// response's cookies, so it is one store: they share a store time, and each
+// gets a creation time of its own, in list order.
 func (j *CookieJar) SetCookies(u *url.URL, cookies []*Cookie) {
 	if len(cookies) == 0 {
 		return
@@ -30,6 +80,7 @@ func (j *CookieJar) SetCookies(u *url.URL, cookies []*Cookie) {
 	j.mu.Lock()
 	defer j.mu.Unlock()
 
+	now := j.clock.Next()
 	for _, cookie := range cookies {
 		if cookie == nil || cookie.Name == "" {
 			continue
@@ -40,16 +91,25 @@ func (j *CookieJar) SetCookies(u *url.URL, cookies []*Cookie) {
 
 		// Remove existing cookie with same name, domain, and path
 		existing := j.cookies[domain]
-		filtered := make([]*Cookie, 0, len(existing))
-		for _, c := range existing {
+		filtered := make([]storedCookie, 0, len(existing))
+		var old *storedCookie
+		for i, c := range existing {
 			if c.Name != cookie.Name || c.Path != cookie.Path {
 				filtered = append(filtered, c)
+			} else {
+				old = &existing[i]
 			}
 		}
 
 		// Add new cookie if not expired
 		if !cookie.IsExpired() {
-			filtered = append(filtered, cookie)
+			// RFC 6265 Section 5.3 step 11.3: a cookie that replaces a live
+			// one keeps its creation time where the preset's browser does.
+			created := j.clock.NotBefore(now)
+			if old != nil && !old.IsExpired() && j.order.KeepsCreation(old.Value, cookie.Value) {
+				created = old.created
+			}
+			filtered = append(filtered, storedCookie{Cookie: cookie, created: created, stored: now})
 		}
 
 		j.cookies[domain] = filtered
@@ -86,7 +146,7 @@ func (j *CookieJar) Cookies(u *url.URL) []*Cookie {
 	defer j.mu.RUnlock()
 
 	now := time.Now()
-	var result []*Cookie
+	var matched []storedCookie
 
 	// Check all domains that could match
 	host := u.Host
@@ -111,16 +171,23 @@ func (j *CookieJar) Cookies(u *url.URL) []*Cookie {
 
 			// Check if cookie matches URL
 			if cookie.Matches(u) {
-				result = append(result, cookie)
+				matched = append(matched, cookie)
 			}
 		}
 	}
 
-	// Sort by path length (longer paths first) for proper precedence
-	sort.Slice(result, func(i, j int) bool {
-		return len(result[i].Path) > len(result[j].Path)
+	// Sort in the order of the preset's browser: longer path first, then the
+	// oldest on Chrome and Firefox presets, or the most recently stored on
+	// WebKit presets. The order is total, so it doesn't depend on the order
+	// the jar holds the cookies in.
+	sort.Slice(matched, func(a, b int) bool {
+		return j.order.Less(matched[a].orderKey(), matched[b].orderKey())
 	})
 
+	var result []*Cookie
+	for _, c := range matched {
+		result = append(result, c.Cookie)
+	}
 	return result
 }
 
@@ -143,7 +210,7 @@ func (j *CookieJar) CookieHeader(u *url.URL) string {
 func (j *CookieJar) Clear() {
 	j.mu.Lock()
 	defer j.mu.Unlock()
-	j.cookies = make(map[string][]*Cookie)
+	j.cookies = make(map[string][]storedCookie)
 }
 
 // ClearDomain removes all cookies for a specific domain
@@ -160,7 +227,7 @@ func (j *CookieJar) ClearExpired() {
 
 	now := time.Now()
 	for domain, cookies := range j.cookies {
-		filtered := make([]*Cookie, 0, len(cookies))
+		filtered := make([]storedCookie, 0, len(cookies))
 		for _, c := range cookies {
 			if c.MaxAge >= 0 && (c.Expires.IsZero() || now.Before(c.Expires)) {
 				filtered = append(filtered, c)
@@ -194,7 +261,9 @@ func (j *CookieJar) AllCookies() map[string][]*Cookie {
 	result := make(map[string][]*Cookie)
 	for domain, cookies := range j.cookies {
 		copied := make([]*Cookie, len(cookies))
-		copy(copied, cookies)
+		for i, c := range cookies {
+			copied[i] = c.Cookie
+		}
 		result[domain] = copied
 	}
 	return result

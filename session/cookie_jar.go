@@ -5,6 +5,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/sardanioss/httpcloak/internal/cookieorder"
 )
 
 // CookieJar manages cookies with proper domain and path scoping
@@ -14,9 +16,15 @@ type CookieJar struct {
 	// Primary key: domain (normalized)
 	// Secondary key: path + "\x00" + name
 	cookies map[string]map[string]*CookieData
+
+	// order is the Cookie header order of the preset's browser, and clock
+	// gives every store a time later than the one before. Both are guarded
+	// by mu.
+	order cookieorder.Order
+	clock cookieorder.Clock
 }
 
-// CookieData extends CookieState with creation time for sorting
+// CookieData extends CookieState with the times the jar orders cookies by
 type CookieData struct {
 	Name      string
 	Value     string
@@ -28,14 +36,23 @@ type CookieData struct {
 	Secure    bool
 	HttpOnly  bool
 	SameSite  string
-	CreatedAt time.Time
+	CreatedAt time.Time // the first store; a live cookie set again keeps it where the preset's browser does
+	StoredAt  time.Time // the last store, which the cookies of one response share
 }
 
-// NewCookieJar creates a new empty cookie jar
+// NewCookieJar creates a new empty cookie jar. It orders cookies as RFC 6265
+// does; a session's own jar takes the order of its preset's browser.
 func NewCookieJar() *CookieJar {
 	return &CookieJar{
 		cookies: make(map[string]map[string]*CookieData),
 	}
+}
+
+// newCookieJar creates an empty jar with the given Cookie header order.
+func newCookieJar(order cookieorder.Order) *CookieJar {
+	j := NewCookieJar()
+	j.order = order
+	return j
 }
 
 // cookieKey generates a unique key for a cookie within a domain
@@ -43,13 +60,36 @@ func cookieKey(path, name string) string {
 	return path + "\x00" + name
 }
 
+// orderKey is what the jar's order reads from the cookie.
+func (c *CookieData) orderKey() cookieorder.Key {
+	return cookieorder.Key{Name: c.Name, Domain: c.Domain, Path: c.Path, Created: c.CreatedAt, Stored: c.StoredAt}
+}
+
 // Set adds or updates a cookie from a Set-Cookie header
 // requestHost is the host that sent the Set-Cookie header
 // requestSecure is true if the request was over HTTPS
 func (j *CookieJar) Set(requestHost string, cookie *CookieData, requestSecure bool) {
+	j.setAll(requestHost, []*CookieData{cookie}, requestSecure)
+}
+
+// setAll stores the cookies of one response, in Set-Cookie order, as one store:
+// they share a store time, and each gets a creation time of its own.
+func (j *CookieJar) setAll(requestHost string, cookies []*CookieData, requestSecure bool) {
+	if len(cookies) == 0 {
+		return
+	}
 	j.mu.Lock()
 	defer j.mu.Unlock()
 
+	now := j.clock.Next()
+	for _, cookie := range cookies {
+		j.set(requestHost, cookie, requestSecure, now)
+	}
+}
+
+// set scopes one cookie from a Set-Cookie header and receives it at now. The
+// caller must hold j.mu.
+func (j *CookieJar) set(requestHost string, cookie *CookieData, requestSecure bool, now time.Time) {
 	// Normalize the request host (lowercase, no port)
 	requestHost = strings.ToLower(requestHost)
 	if idx := strings.LastIndex(requestHost, ":"); idx != -1 {
@@ -108,7 +148,7 @@ func (j *CookieJar) Set(requestHost string, cookie *CookieData, requestSecure bo
 		HttpOnly: cookie.HttpOnly,
 		SameSite: cookie.SameSite,
 	}
-	j.receive(stored, time.Now())
+	j.receive(stored, now)
 }
 
 // receive stores a cookie that just arrived on a Set-Cookie header, where
@@ -136,7 +176,11 @@ func capMaxAge(maxAge int) int {
 	return min(maxAge, maxCookieAgeSeconds)
 }
 
-// store inserts an already scoped cookie. The caller must hold j.mu.
+// store inserts an already scoped cookie as stored at now, the time the
+// cookies of one store share. One with a negative Max-Age, or expired at now,
+// deletes the cookie it would replace instead. Otherwise it is created at a
+// time of its own, later than any before, unless it replaces a live cookie
+// whose creation time the preset's browser keeps. The caller must hold j.mu.
 func (j *CookieJar) store(cookie *CookieData, now time.Time) {
 	domain := cookie.Domain
 	key := cookieKey(cookie.Path, cookie.Name)
@@ -148,12 +192,18 @@ func (j *CookieJar) store(cookie *CookieData, now time.Time) {
 		return
 	}
 
-	cookie.CreatedAt = now
+	created := j.clock.NotBefore(now)
+	// Replacing a live cookie keeps its header ordering, not its old TTL,
+	// where the preset's browser keeps its creation time (RFC 6265 Section
+	// 5.3 step 11.3). An expired cookie counts as gone, as in Firefox, so its
+	// replacement is a new cookie.
 	if previous := j.cookies[domain][key]; previous != nil &&
-		(previous.Expires == nil || previous.Expires.After(now)) {
-		// Replacing a live cookie keeps its header ordering, not its old TTL.
-		cookie.CreatedAt = previous.CreatedAt
+		(previous.Expires == nil || previous.Expires.After(now)) &&
+		j.order.KeepsCreation(previous.Value, cookie.Value) {
+		created = previous.CreatedAt
 	}
+	cookie.CreatedAt, cookie.StoredAt = created, now.Round(0)
+
 	if j.cookies[domain] == nil {
 		j.cookies[domain] = make(map[string]*CookieData)
 	}
@@ -215,12 +265,11 @@ func (j *CookieJar) Get(requestHost, requestPath string, requestSecure bool) []*
 		}
 	}
 
-	// Sort: longer path first, then older creation time first
+	// Sort in the order of the preset's browser: longer path first, then the
+	// oldest on Chrome and Firefox presets, or the most recently stored on
+	// WebKit presets. The order is total, so ties don't come out in map order.
 	sort.Slice(matches, func(i, k int) bool {
-		if len(matches[i].Path) != len(matches[k].Path) {
-			return len(matches[i].Path) > len(matches[k].Path)
-		}
-		return matches[i].CreatedAt.Before(matches[k].CreatedAt)
+		return j.order.Less(matches[i].orderKey(), matches[k].orderKey())
 	})
 
 	return matches
@@ -241,7 +290,7 @@ func (j *CookieJar) GetAll() []CookieState {
 				continue
 			}
 
-			createdAt := c.CreatedAt
+			createdAt, storedAt := c.CreatedAt, c.StoredAt
 			result = append(result, CookieState{
 				Name:      c.Name,
 				Value:     c.Value,
@@ -253,6 +302,7 @@ func (j *CookieJar) GetAll() []CookieState {
 				HttpOnly:  c.HttpOnly,
 				SameSite:  c.SameSite,
 				CreatedAt: &createdAt,
+				StoredAt:  &storedAt,
 			})
 		}
 	}
@@ -306,7 +356,8 @@ func (j *CookieJar) SetSimple(name, value, domain, path string, secure, httpOnly
 		HttpOnly: httpOnly,
 		SameSite: sameSite,
 	}
-	now := time.Now()
+	// One call is one store.
+	now := j.clock.Next()
 	// A cookie read back from GetCookies carries both fields, with Expires
 	// already resolved from Max-Age. Resolving again would restart its clock
 	// on every copy, so Max-Age only counts when no Expires came with it.
@@ -405,7 +456,7 @@ func (j *CookieJar) Export() map[string][]CookieState {
 				continue
 			}
 
-			createdAt := c.CreatedAt
+			createdAt, storedAt := c.CreatedAt, c.StoredAt
 			cookies = append(cookies, CookieState{
 				Name:      c.Name,
 				Value:     c.Value,
@@ -417,6 +468,7 @@ func (j *CookieJar) Export() map[string][]CookieState {
 				HttpOnly:  c.HttpOnly,
 				SameSite:  c.SameSite,
 				CreatedAt: &createdAt,
+				StoredAt:  &storedAt,
 			})
 		}
 		if len(cookies) > 0 {
@@ -434,7 +486,16 @@ func (j *CookieJar) Import(cookies map[string][]CookieState) {
 
 	now := time.Now()
 
-	for domain, domainCookies := range cookies {
+	// Domains in a fixed order, so that cookies without saved times get
+	// their store times in the same order on every load.
+	domains := make([]string, 0, len(cookies))
+	for domain := range cookies {
+		domains = append(domains, domain)
+	}
+	sort.Strings(domains)
+
+	for _, domain := range domains {
+		domainCookies := cookies[domain]
 		if j.cookies[domain] == nil {
 			j.cookies[domain] = make(map[string]*CookieData)
 		}
@@ -453,10 +514,25 @@ func (j *CookieJar) Import(cookies map[string][]CookieState) {
 			// Determine if host-only based on domain format
 			hostOnly := !strings.HasPrefix(c.Domain, ".")
 
-			// Use saved CreatedAt if available, otherwise use current time
-			createdAt := now
+			// Use the saved times if available, and have the clock hand
+			// out later ones (Clock.Saw, up to a second past the system
+			// clock), so that a cookie stored after the load is newer than
+			// these. A file written before stored_at existed has created_at
+			// alone, which stands in for it: 1.7.3 and earlier re-stamped
+			// it on every store, so it is the last store there, and 1.7.4
+			// kept it across a live replacement, so there it is the first.
+			// A cookie with neither is a store of its own, in list order.
+			var createdAt time.Time
 			if c.CreatedAt != nil {
 				createdAt = *c.CreatedAt
+				j.clock.Saw(createdAt)
+			} else {
+				createdAt = j.clock.Next()
+			}
+			storedAt := createdAt
+			if c.StoredAt != nil {
+				storedAt = *c.StoredAt
+				j.clock.Saw(storedAt)
 			}
 
 			j.cookies[domain][cookieKey(path, c.Name)] = &CookieData{
@@ -471,6 +547,7 @@ func (j *CookieJar) Import(cookies map[string][]CookieState) {
 				HttpOnly:  c.HttpOnly,
 				SameSite:  c.SameSite,
 				CreatedAt: createdAt,
+				StoredAt:  storedAt,
 			}
 		}
 	}
@@ -514,6 +591,8 @@ func (j *CookieJar) ImportV4(cookies []CookieState) {
 			j.cookies[domain] = make(map[string]*CookieData)
 		}
 
+		// v4 kept no times: each cookie is a store of its own, in list order.
+		t := j.clock.Next()
 		j.cookies[domain][cookieKey(path, c.Name)] = &CookieData{
 			Name:      c.Name,
 			Value:     c.Value,
@@ -525,7 +604,8 @@ func (j *CookieJar) ImportV4(cookies []CookieState) {
 			Secure:    c.Secure,
 			HttpOnly:  c.HttpOnly,
 			SameSite:  c.SameSite,
-			CreatedAt: now,
+			CreatedAt: t,
+			StoredAt:  t,
 		}
 	}
 }
