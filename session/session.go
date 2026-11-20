@@ -1135,7 +1135,7 @@ func (s *Session) learnsAcceptCH(req *transport.Request) bool {
 	if req.TLSOnly != nil {
 		tlsOnly = *req.TLSOnly
 	}
-	dest := secfetch.Dest(s.preset(), tlsOnly, req.Method, req.Headers, req.ExactHeaders)
+	dest := secfetch.Dest(s.preset(), tlsOnly, req.Method, req.Initiator, req.Headers, req.ExactHeaders)
 	return dest == "" || strings.EqualFold(dest, "document")
 }
 

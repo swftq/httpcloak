@@ -42,7 +42,7 @@ func TestSecFetchDestMatchesTheWire(t *testing.T) {
 			req := s.req
 			req.URL = "https://" + srv.addr + "/"
 			tlsOnly := req.TLSOnly != nil && *req.TLSOnly
-			if got := secfetch.Dest(tr.getPreset(), tlsOnly, req.Method, req.Headers, req.ExactHeaders); got != s.want {
+			if got := secfetch.Dest(tr.getPreset(), tlsOnly, req.Method, req.Initiator, req.Headers, req.ExactHeaders); got != s.want {
 				t.Errorf("%s %s: secfetch.Dest %q, want %q", preset, s.name, got, s.want)
 			}
 

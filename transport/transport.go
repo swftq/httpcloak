@@ -3371,7 +3371,7 @@ func frameNavigation(userHeaders map[string][]string) bool {
 // for, which makes it a CORS call, unless they set its Sec-Fetch-Mode or
 // Sec-Fetch-Dest themselves; then sniffXHRMode reads those as always.
 func statedCORS(initiator string, userHeaders map[string][]string) bool {
-	return initiator != "" && headerVal(userHeaders, "Sec-Fetch-Mode") == "" && headerVal(userHeaders, "Sec-Fetch-Dest") == ""
+	return secfetch.StatedCORS(initiator, userHeaders)
 }
 
 // FetchMode returns the Sec-Fetch-Mode req goes out with on this transport,
@@ -3379,8 +3379,9 @@ func statedCORS(initiator string, userHeaders map[string][]string) bool {
 //
 // A Sec-Fetch-Mode the caller set wins, from Headers or, under ExactHeaders,
 // from the list, which is then the only place one can come from. Otherwise it
-// is what applyPresetHeaders writes: "cors" for a request sniffXHRMode reads as
-// fetch-shaped, and the preset's own value, a navigation's, for anything else.
+// is what applyPresetHeaders writes: "cors" for a request whose caller named its
+// page API (see statedCORS) or that sniffXHRMode reads as fetch-shaped, and the
+// preset's own value, a navigation's, for anything else.
 // A TLS-only request writes none, and neither does a preset that sends no
 // Sec-Fetch-*.
 //
@@ -3407,7 +3408,7 @@ func (t *Transport) FetchMode(req *Request) string {
 		return ""
 	}
 	wire := t.wireHeaders(preset)
-	if wire.sendsSecFetch && sniffXHRMode(req.Method, req.Headers) {
+	if wire.sendsSecFetch && (statedCORS(req.Initiator, req.Headers) || sniffXHRMode(req.Method, req.Headers)) {
 		return "cors"
 	}
 	for _, p := range wire.pairs {

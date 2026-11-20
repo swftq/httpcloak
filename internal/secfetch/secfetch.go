@@ -117,12 +117,21 @@ func SniffXHRMode(method string, userHeaders map[string][]string) bool {
 	return true
 }
 
+// StatedCORS reports whether the caller named the page API a request stands
+// for (initiator), which makes it a CORS call, unless they set its
+// Sec-Fetch-Mode or Sec-Fetch-Dest themselves; then SniffXHRMode reads those as
+// always.
+func StatedCORS(initiator string, headers map[string][]string) bool {
+	return initiator != "" && headerVal(headers, "Sec-Fetch-Mode") == "" && headerVal(headers, "Sec-Fetch-Dest") == ""
+}
+
 // Dest returns the Sec-Fetch-Dest a request goes out with, "" when it carries
 // none. It follows the transport's composition of the header: under exact
 // headers, the pair as given; otherwise the caller's own value; none on a
 // TLS-only request or a preset that sends no Sec-Fetch metadata; "empty" when
-// the request sniffs as a fetch; and the preset's own value for the rest.
-func Dest(preset *fingerprint.Preset, tlsOnly bool, method string, headers map[string][]string, exact []fingerprint.HeaderPair) string {
+// the caller named the page API the request stands for (see StatedCORS) or it
+// sniffs as a fetch; and the preset's own value for the rest.
+func Dest(preset *fingerprint.Preset, tlsOnly bool, method, initiator string, headers map[string][]string, exact []fingerprint.HeaderPair) string {
 	if len(exact) > 0 {
 		for _, hp := range exact {
 			if strings.EqualFold(hp.Key, "Sec-Fetch-Dest") {
@@ -137,7 +146,7 @@ func Dest(preset *fingerprint.Preset, tlsOnly bool, method string, headers map[s
 	if tlsOnly || !PresetSends(preset) {
 		return ""
 	}
-	if SniffXHRMode(method, headers) {
+	if StatedCORS(initiator, headers) || SniffXHRMode(method, headers) {
 		return "empty"
 	}
 	return presetValue(preset, "Sec-Fetch-Dest")
