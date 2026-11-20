@@ -4,7 +4,10 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"io"
 	"net"
+	"net/http/httputil"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -221,6 +224,8 @@ func (s *h1OrderCapture) serve(conn net.Conn) {
 
 	var names []string
 	var probe string
+	var length int64
+	var chunked bool
 	for {
 		line, err := br.ReadString('\n')
 		if err != nil {
@@ -244,7 +249,27 @@ func (s *h1OrderCapture) serve(conn net.Conn) {
 		if name == "x-probe" {
 			probe = strings.TrimSpace(value)
 		}
+		if name == "content-length" {
+			length, _ = strconv.ParseInt(strings.TrimSpace(value), 10, 64)
+		}
+		if name == "transfer-encoding" {
+			chunked = true
+		}
 		names = append(names, name)
+	}
+	// Read the body before answering, sized or chunked, with the blank line
+	// that ends a chunked one. Closing a socket with unread data in it resets
+	// the connection, and on Windows the reset can reach the client before it
+	// has read the response.
+	if chunked {
+		if _, err := io.Copy(io.Discard, httputil.NewChunkedReader(br)); err != nil {
+			return
+		}
+		if _, err := br.ReadString('\n'); err != nil {
+			return
+		}
+	} else if _, err := io.CopyN(io.Discard, br, length); err != nil {
+		return
 	}
 
 	s.mu.Lock()

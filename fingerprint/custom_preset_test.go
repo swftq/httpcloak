@@ -378,6 +378,48 @@ func TestBuildPresetValidationStreamPriorityMode(t *testing.T) {
 	}
 }
 
+// header_order_model takes list or cfnetwork, and based_on carries it like any
+// other http2 key: chrome-150-ios has none of its own and inherits
+// chrome-148-ios's.
+func TestHeaderOrderModelKey(t *testing.T) {
+	for _, c := range []struct {
+		json, want string
+	}{
+		{`"list"`, HeaderOrderModelList},
+		{`"cfnetwork"`, HeaderOrderModelCFNetwork},
+	} {
+		p, err := LoadAndBuildPresetFromJSON([]byte(`{"version": 1, "preset": {"name": "order-model",
+			"based_on": "chrome-146-windows", "http2": {"header_order_model": ` + c.json + `}}}`))
+		if err != nil {
+			t.Fatalf("header_order_model %s: %v", c.json, err)
+		}
+		if got := p.H2HeaderOrderModel(); got != c.want {
+			t.Errorf("header_order_model %s: model %q, want %q", c.json, got, c.want)
+		}
+	}
+
+	bad := "foo"
+	if _, err := BuildPreset(&PresetSpec{Name: "bad-order-model", HTTP2: &HTTP2Spec{HeaderOrderModel: &bad}}); err == nil {
+		t.Error("header_order_model foo loaded; want an error")
+	}
+
+	if got := Get("chrome-146-windows").H2HeaderOrderModel(); got != HeaderOrderModelList {
+		t.Errorf("chrome-146-windows: model %q, want the default %q", got, HeaderOrderModelList)
+	}
+	for _, name := range []string{"chrome-148-ios", "chrome-150-ios", "chrome-155-ios"} {
+		if got := Get(name).H2HeaderOrderModel(); got != HeaderOrderModelCFNetwork {
+			t.Errorf("%s: model %q, want %q", name, got, HeaderOrderModelCFNetwork)
+		}
+	}
+	p, err := BuildPreset(&PresetSpec{Name: "on-safari-26", BasedOn: "safari-26"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := p.H2HeaderOrderModel(); got != HeaderOrderModelCFNetwork {
+		t.Errorf("based_on safari-26: model %q, want %q", got, HeaderOrderModelCFNetwork)
+	}
+}
+
 func TestBuildPresetValidationQUICTransportOrder(t *testing.T) {
 	bad := "invalid-order"
 	spec := &PresetSpec{

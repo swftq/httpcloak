@@ -70,6 +70,7 @@
         ":authority",
         ":path"
       ],
+      "header_order_model": "cfnetwork",
       "hpack_header_order": [
         "sec-fetch-dest",
         "user-agent",
@@ -86,7 +87,6 @@
         "accept-language",
         "priority",
         "accept-encoding",
-        "connection",
         "cookie",
         "connection"
       ],
