@@ -90,6 +90,8 @@ func TestRedirectChainRefererAndFetchSite(t *testing.T) {
 	}
 }
 
+// A hop from a URL that was same-origin with the chain's page gets that URL's
+// relation to the hop's own; see redirectFetchSite.
 func TestFetchSiteRelation(t *testing.T) {
 	for _, c := range []struct{ ref, to, want string }{
 		{"https://a.example.com/x", "https://a.example.com/y", "same-origin"},
@@ -98,8 +100,8 @@ func TestFetchSiteRelation(t *testing.T) {
 		{"https://example.com/x", "https://other.org/", "cross-site"},
 		{"https://127.0.0.1:1/", "https://127.0.0.1:2/", "same-site"},
 	} {
-		if got := fetchSiteRelation(c.ref, c.to); got != c.want {
-			t.Errorf("fetchSiteRelation(%q, %q) = %q, want %q", c.ref, c.to, got, c.want)
+		if got := redirectFetchSite("same-origin", c.ref, c.to); got != c.want {
+			t.Errorf("redirectFetchSite(same-origin, %q, %q) = %q, want %q", c.ref, c.to, got, c.want)
 		}
 	}
 }
