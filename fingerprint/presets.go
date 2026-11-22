@@ -191,7 +191,8 @@ func SpecFor(id tls.ClientHelloID, seed int64, sigAlgs []tls.SignatureScheme) (*
 
 // SpecForWithAnchors is SpecFor plus the trust_anchors list, which is an
 // insertion rather than an override and so cannot go through the same
-// slice-mutating helper.
+// slice-mutating helper. It also matches the padding of the hello sent after a
+// HelloRetryRequest to id's browser (ApplyRetryHelloPadding).
 func SpecForWithAnchors(id tls.ClientHelloID, seed int64, sigAlgs []tls.SignatureScheme, anchors [][]byte) (*tls.ClientHelloSpec, error) {
 	spec, err := tls.UTLSIdToSpecWithSeed(id, seed)
 	if err != nil {
@@ -199,6 +200,7 @@ func SpecForWithAnchors(id tls.ClientHelloID, seed int64, sigAlgs []tls.Signatur
 	}
 	ApplySignatureAlgorithms(spec.Extensions, sigAlgs)
 	ApplyTrustAnchors(&spec.Extensions, anchors)
+	ApplyRetryHelloPadding(&spec, id)
 	return &spec, nil
 }
 

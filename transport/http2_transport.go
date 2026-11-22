@@ -1008,11 +1008,13 @@ func (t *HTTP2Transport) establishConn(ctx context.Context, host, port string, s
 				fallbackSpec = spec
 			} else if t.hasPSKSpec {
 				if spec, specErr := utls.UTLSIdToSpecWithSeed(t.preset.PSKClientHelloID, t.shuffleSeed); specErr == nil {
+					fingerprint.ApplyRetryHelloPadding(&spec, t.preset.PSKClientHelloID)
 					fallbackSpec = &spec
 				}
 			}
 			if fallbackSpec == nil {
 				if spec, specErr := utls.UTLSIdToSpecWithSeed(t.preset.ClientHelloID, t.shuffleSeed); specErr == nil {
+					fingerprint.ApplyRetryHelloPadding(&spec, t.preset.ClientHelloID)
 					fallbackSpec = &spec
 				}
 			}

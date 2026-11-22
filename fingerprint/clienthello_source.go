@@ -153,6 +153,11 @@ func ResolveClientHelloSpec(
 	if err != nil {
 		return nil, SourceClientHelloID, fmt.Errorf("build spec for %s/%s: %w", id.Client, id.Version, err)
 	}
+	// A ClientHelloID names the browser, so the hello sent after a
+	// HelloRetryRequest can follow it. A JA3 string or a capture does not say
+	// which TLS stack sent it, and NSS pads that hello where BoringSSL does
+	// not, so those sources keep utls's padding.
+	ApplyRetryHelloPadding(&spec, id)
 	return &spec, SourceClientHelloID, nil
 }
 
