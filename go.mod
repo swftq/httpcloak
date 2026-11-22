@@ -30,3 +30,9 @@ require (
 	golang.org/x/text v0.32.0 // indirect
 	golang.org/x/tools v0.39.0 // indirect
 )
+
+// Local build of sardanioss/quic-go carrying a client's custom transport
+// parameter order, its active_connection_id_limit, and Safari's Initial
+// packet settings (branch feat/safari-quic-initial). Drop this and require
+// the tag once that change is released.
+replace github.com/sardanioss/quic-go => D:/go-repos/src/quic-go-swftq-safari-initial
