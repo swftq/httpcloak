@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **The Safari 18 and 26 presets and Chrome on iOS send their second ClientHello unpadded, as Safari does**: a server that has none of the key exchange groups a ClientHello sent shares for, but supports another it lists, answers with a HelloRetryRequest, and the client sends its hello again with a share for that group. Safari sends that second hello without the padding extension, as BoringSSL has since 2021, but utls recomputes the padding when it rebuilds the hello, so every preset built on the Safari 18 or iOS 18 hello padded it to 512 bytes, where Safari 26.3 sent 364 unpadded. That is `safari-18` and `safari-latest`, `safari-18-ios`, `safari-26-ios` and `safari-latest-ios`, every iOS Chrome preset, and their `ios-` aliases. The first hello, and every handshake with a server that accepts X25519MLKEM768 or X25519, are unchanged. `safari-17-ios` keeps padding its second hello, since nothing shows what iOS 17 sends there, and so does a `ja3` or `raw_client_hello` source, which doesn't say which browser it came from. The Chromium and Firefox presets never padded it and still don't.
+
 ## [1.7.4] - 2026-11-15
 
 ### Added
