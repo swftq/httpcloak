@@ -424,6 +424,25 @@ func flattenHTTP3(p *Preset) *HTTP3Spec {
 		out.QUICInitialConnectionReceiveWindow = &v
 	}
 
+	// The connection-ID limit and the Initial packets' shape, likewise only
+	// when set: left unset they are quic-go's, which are Chrome's.
+	if p.H3Config != nil && p.H3Config.QUICActiveConnectionIDLimit != nil {
+		v := *p.H3Config.QUICActiveConnectionIDLimit
+		out.QUICActiveConnectionIDLimit = &v
+	}
+	if p.H3Config != nil && p.H3Config.QUICInitialCryptoDataPerPacket != nil {
+		v := *p.H3Config.QUICInitialCryptoDataPerPacket
+		out.QUICInitialCryptoDataPerPacket = &v
+	}
+	if p.H3Config != nil && p.H3Config.QUICPacketNumbersFromZero != nil {
+		v := *p.H3Config.QUICPacketNumbersFromZero
+		out.QUICPacketNumbersFromZero = &v
+	}
+	if p.H3Config != nil && p.H3Config.QUICShortInitialPacketNumbers != nil {
+		v := *p.H3Config.QUICShortInitialPacketNumbers
+		out.QUICShortInitialPacketNumbers = &v
+	}
+
 	return out
 }
 

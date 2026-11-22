@@ -15,6 +15,7 @@ import (
 	"crypto/rand"
 	"encoding/binary"
 	mrand "math/rand"
+	"slices"
 	"time"
 
 	"github.com/sardanioss/httpcloak/fingerprint"
@@ -126,9 +127,17 @@ func QUICConfig(o QUICOptions) *quic.Config {
 		ClientHelloID:                 o.ClientHelloID,
 		CachedClientHelloSpec:         o.CachedSpec,
 		TransportParameterOrder:       TransportParamOrder(p.H3QUICTransportParamOrder()),
+		CustomTransportParameterOrder: CustomTransportParamOrder(p.H3QUICTransportParamOrder()),
 		TransportParameterShuffleSeed: o.TransportParameterShuffleSeed,
 		AdditionalTransportParameters: o.AdditionalTransportParameters,
 		MaxDatagramFrameSize:          p.H3QUICMaxDatagramFrameSize(),
+		ActiveConnectionIDLimit:       p.H3QUICActiveConnectionIDLimit(),
+
+		// The Initial packets' shape. Zero values are quic-go's, which
+		// are Chrome's.
+		InitialCryptoDataPerPacket: p.H3QUICInitialCryptoDataPerPacket(),
+		PacketNumbersFromZero:      p.H3QUICPacketNumbersFromZero(),
+		ShortInitialPacketNumbers:  p.H3QUICShortInitialPacketNumbers(),
 	}
 
 	if len(o.ECHConfigList) > 0 {
@@ -160,10 +169,72 @@ func QUICConfig(o QUICOptions) *quic.Config {
 
 // TransportParamOrder converts a preset's string to the quic-go mode.
 func TransportParamOrder(mode string) quic.TransportParameterOrderMode {
-	if mode == "random" {
+	switch mode {
+	case "random":
 		return quic.TransportParameterOrderDefault
+	case "safari":
+		return quic.TransportParameterOrderCustom
 	}
 	return quic.TransportParameterOrderChrome
+}
+
+// SafariTransportParameterOrder is the order, and the whole set, of the
+// transport parameters Safari 26.3 sent on macOS 26.3, decrypted from its
+// first Initial packets (run-20261121-225724, lo0.pcap packets 34075 and
+// 34076): initial_max_streams_uni, active_connection_id_limit,
+// initial_source_connection_id, initial_max_data,
+// initial_max_stream_data_bidi_local, _bidi_remote and _uni, then
+// SafariPrivateParameter.
+//
+// There's no GREASE parameter, and none of max_idle_timeout,
+// max_udp_payload_size, initial_max_streams_bidi and max_datagram_frame_size:
+// quic-go writes only the listed ones.
+var SafariTransportParameterOrder = []uint64{0x9, 0xe, 0xf, 0x4, 0x5, 0x6, 0x7, SafariPrivateParameter}
+
+// SafariPrivateParameter is the last transport parameter Safari sends, with
+// the one-byte value SafariPrivateValue. No RFC assigns 0xff080808, and it is
+// no GREASE value, since those are 31*N+27. Most likely it is Apple's own;
+// what it means can't be read off the wire.
+const SafariPrivateParameter = 0xff080808
+
+// SafariPrivateValue is what Safari 26.3 sent in SafariPrivateParameter.
+var SafariPrivateValue = []byte{0x07}
+
+// maxDatagramFrameSizeParameter is max_datagram_frame_size (RFC 9221).
+const maxDatagramFrameSizeParameter = 0x20
+
+// CustomTransportParamOrder returns the parameter IDs, in order, that a mode
+// quic-go can't build on its own sends. It is nil for the others.
+func CustomTransportParamOrder(mode string) []uint64 {
+	if mode == "safari" {
+		return slices.Clone(SafariTransportParameterOrder)
+	}
+	return nil
+}
+
+// ExtraTransportParams returns the values of the transport parameters a
+// non-Chromium preset sends that quic-go doesn't implement: for the Safari
+// order, SafariPrivateParameter. The map is never nil, because quic-go reads a
+// nil one as "use the process-wide set".
+func ExtraTransportParams(p *fingerprint.Preset) map[uint64][]byte {
+	if p.H3QUICTransportParamOrder() == "safari" {
+		return map[uint64][]byte{SafariPrivateParameter: slices.Clone(SafariPrivateValue)}
+	}
+	return map[uint64][]byte{}
+}
+
+// AdvertiseDatagrams makes a config from QUICConfig advertise
+// max_datagram_frame_size, which the outer connection of a MASQUE tunnel needs
+// whatever the preset: a proxy may send DATAGRAM frames only to a client that
+// advertised them. Safari's order leaves the parameter out, so it goes last,
+// and that outer connection sends one parameter Safari's don't: the tunnel
+// can't work without it.
+func AdvertiseDatagrams(cfg *quic.Config) {
+	if cfg.TransportParameterOrder != quic.TransportParameterOrderCustom ||
+		slices.Contains(cfg.CustomTransportParameterOrder, maxDatagramFrameSizeParameter) {
+		return
+	}
+	cfg.CustomTransportParameterOrder = append(slices.Clone(cfg.CustomTransportParameterOrder), maxDatagramFrameSizeParameter)
 }
 
 // GREASESetting draws the reserved SETTINGS identifier and its value the way

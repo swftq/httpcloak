@@ -173,7 +173,7 @@ Content-Length: 7
 body "{\"k\":1}"
 
 ## quic client hello
-first datagram size 1250
+first datagram size 1200
 initial: dcid 8 bytes, scid 0 bytes, token 0 bytes
 extensions GREASE,10,16,5,13,18,51,45,43,57,27,GREASE
 legacy_version 0x0303
@@ -189,7 +189,7 @@ ext 43: GREASE 772
 ext 45: 0101
 ext 5: 0100000000
 ext 51: GREASE:1 4588:1216 29:32
-ext 57: GREASE 0x5=2097152 0x6=2097152 0x7=2097152 0x4=16777216 0x8=100 0x9=8 0x1=30000 0x3=1472 0xf=cid(0) 0x20=65536
+ext 57: 0x9=8 0xe=64 0xf=cid(0) 0x4=16777216 0x5=2097152 0x6=2097152 0x7=2097152 0xff080808=7
 ext GREASE: 
 ext GREASE: 00
 
@@ -323,19 +323,23 @@ DATA len=7
       "qpack_blocked_streams": 100,
       "max_field_section_size": 0,
       "enable_datagrams": false,
-      "quic_initial_packet_size": 1250,
+      "quic_initial_packet_size": 1200,
       "quic_max_incoming_streams": 100,
       "quic_max_incoming_uni_streams": 8,
       "quic_allow_0rtt": true,
       "quic_chrome_style_initial": false,
-      "quic_disable_hello_scramble": false,
-      "quic_transport_param_order": "random",
+      "quic_disable_hello_scramble": true,
+      "quic_transport_param_order": "safari",
       "quic_connection_id_length": 0,
       "quic_max_datagram_frame_size": 65536,
       "max_response_header_bytes": 262144,
       "send_grease_frames": false,
       "quic_initial_stream_receive_window": 2097152,
-      "quic_initial_connection_receive_window": 16777216
+      "quic_initial_connection_receive_window": 16777216,
+      "quic_active_connection_id_limit": 64,
+      "quic_initial_crypto_data_per_packet": 999,
+      "quic_packet_numbers_from_zero": true,
+      "quic_short_initial_packet_numbers": true
     },
     "headers": {
       "user_agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 26_6_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/152.0.7977.64 Mobile/15E148 Safari/604.1",

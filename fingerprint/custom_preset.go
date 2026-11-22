@@ -235,7 +235,7 @@ type HTTP3Spec struct {
 	QUICAllow0RTT             *bool   `json:"quic_allow_0rtt,omitempty"`
 	QUICChromeStyleInitial    *bool   `json:"quic_chrome_style_initial,omitempty"`
 	QUICDisableHelloScramble  *bool   `json:"quic_disable_hello_scramble,omitempty"`
-	QUICTransportParamOrder   *string `json:"quic_transport_param_order,omitempty"` // "chrome","random"
+	QUICTransportParamOrder   *string `json:"quic_transport_param_order,omitempty"` // "chrome","random","safari"
 	QUICConnectionIDLength    *int    `json:"quic_connection_id_length,omitempty"`
 	QUICMaxDatagramFrameSize  *uint64 `json:"quic_max_datagram_frame_size,omitempty"`
 	MaxResponseHeaderBytes    *uint64 `json:"max_response_header_bytes,omitempty"`
@@ -252,6 +252,14 @@ type HTTP3Spec struct {
 	// + smaller per-stream (2 MiB) than Chrome desktop.
 	QUICInitialStreamReceiveWindow     *uint64 `json:"quic_initial_stream_receive_window,omitempty"`
 	QUICInitialConnectionReceiveWindow *uint64 `json:"quic_initial_connection_receive_window,omitempty"`
+
+	// active_connection_id_limit, and the shape of the Initial packets. nil
+	// keeps quic-go's, which are Chrome's: no limit sent, each Initial filled
+	// with ClientHello bytes, packet numbers from 1 in two bytes.
+	QUICActiveConnectionIDLimit    *uint64 `json:"quic_active_connection_id_limit,omitempty"`
+	QUICInitialCryptoDataPerPacket *uint16 `json:"quic_initial_crypto_data_per_packet,omitempty"`
+	QUICPacketNumbersFromZero      *bool   `json:"quic_packet_numbers_from_zero,omitempty"`
+	QUICShortInitialPacketNumbers  *bool   `json:"quic_short_initial_packet_numbers,omitempty"`
 }
 
 // HeaderSpec defines header fingerprint configuration.
@@ -638,6 +646,22 @@ func clonePreset(src *Preset) *Preset {
 		if src.H3Config.QUICInitialConnectionReceiveWindow != nil {
 			v := *src.H3Config.QUICInitialConnectionReceiveWindow
 			h3.QUICInitialConnectionReceiveWindow = &v
+		}
+		if src.H3Config.QUICActiveConnectionIDLimit != nil {
+			v := *src.H3Config.QUICActiveConnectionIDLimit
+			h3.QUICActiveConnectionIDLimit = &v
+		}
+		if src.H3Config.QUICInitialCryptoDataPerPacket != nil {
+			v := *src.H3Config.QUICInitialCryptoDataPerPacket
+			h3.QUICInitialCryptoDataPerPacket = &v
+		}
+		if src.H3Config.QUICPacketNumbersFromZero != nil {
+			v := *src.H3Config.QUICPacketNumbersFromZero
+			h3.QUICPacketNumbersFromZero = &v
+		}
+		if src.H3Config.QUICShortInitialPacketNumbers != nil {
+			v := *src.H3Config.QUICShortInitialPacketNumbers
+			h3.QUICShortInitialPacketNumbers = &v
 		}
 		dst.H3Config = &h3
 	}
@@ -1315,6 +1339,22 @@ func applyHTTP3(p *Preset, spec *HTTP3Spec) {
 		v := *spec.QUICInitialConnectionReceiveWindow
 		h3.QUICInitialConnectionReceiveWindow = &v
 	}
+	if spec.QUICActiveConnectionIDLimit != nil {
+		v := *spec.QUICActiveConnectionIDLimit
+		h3.QUICActiveConnectionIDLimit = &v
+	}
+	if spec.QUICInitialCryptoDataPerPacket != nil {
+		v := *spec.QUICInitialCryptoDataPerPacket
+		h3.QUICInitialCryptoDataPerPacket = &v
+	}
+	if spec.QUICPacketNumbersFromZero != nil {
+		v := *spec.QUICPacketNumbersFromZero
+		h3.QUICPacketNumbersFromZero = &v
+	}
+	if spec.QUICShortInitialPacketNumbers != nil {
+		v := *spec.QUICShortInitialPacketNumbers
+		h3.QUICShortInitialPacketNumbers = &v
+	}
 }
 
 func applyHeaders(p *Preset, spec *HeaderSpec) {
@@ -1622,11 +1662,16 @@ func validatePreset(p *Preset, spec *PresetSpec) error {
 		// Validate QUIC transport param order
 		if spec.HTTP3.QUICTransportParamOrder != nil {
 			switch *spec.HTTP3.QUICTransportParamOrder {
-			case "chrome", "random":
+			case "chrome", "random", "safari":
 				// valid
 			default:
-				return fmt.Errorf("invalid quic_transport_param_order: %q (must be chrome/random)", *spec.HTTP3.QUICTransportParamOrder)
+				return fmt.Errorf("invalid quic_transport_param_order: %q (must be chrome/random/safari)", *spec.HTTP3.QUICTransportParamOrder)
 			}
+		}
+		// RFC 9000 section 18.2: below 2 is invalid, and 2 is the default,
+		// which is not sent.
+		if l := spec.HTTP3.QUICActiveConnectionIDLimit; l != nil && *l < 2 {
+			return fmt.Errorf("invalid quic_active_connection_id_limit: %d (must be at least 2)", *l)
 		}
 	}
 

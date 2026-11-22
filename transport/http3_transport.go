@@ -162,9 +162,10 @@ func ResetInitialRTT() {}
 // AdditionalTransportParamsForPreset returns per-connection additional QUIC
 // transport params appropriate for the given preset. For Chrome presets that is
 // version_information (0x11) and google_connection_options (0x3128). For
-// non-Chrome presets (e.g. Firefox) it returns an empty map so these
-// Chrome-specific params are not sent. A preset whose HTTP/3 hello is a capture
-// sends whichever of the two the capture carries.
+// non-Chrome presets (e.g. Firefox) it returns no Chrome-specific params; a
+// preset on Safari's parameter order gets Safari's private 0xff080808 and
+// nothing else. A preset whose HTTP/3 hello is a capture sends whichever of
+// the two Chrome params the capture carries.
 //
 // The ctx/host/port parameters are unused and retained for API compatibility;
 // they previously drove the initial_rtt probe.
@@ -185,13 +186,14 @@ func AdditionalTransportParamsForPreset(preset *fingerprint.Preset, _ context.Co
 	}
 
 	if !presetIsChromeQUIC(preset) {
-		// Empty, NOT nil. quic-go treats a nil additional-parameter map as "fall
-		// back to the process-global set", and MeasureAndSetInitialRTT writes
-		// Chrome's parameters into exactly that global. Returning nil here would
+		// Never nil, and empty unless the preset is on Safari's order. quic-go
+		// treats a nil additional-parameter map as "fall back to the
+		// process-global set", and MeasureAndSetInitialRTT writes Chrome's
+		// parameters into exactly that global. Returning nil here would
 		// therefore let one call to a deprecated helper put Chrome's
 		// browser-specific parameters back on every non-Chrome profile, for the
 		// life of the process, silently undoing this gate.
-		return map[uint64][]byte{}
+		return h3build.ExtraTransportParams(preset)
 	}
 	return BuildChromeTransportParamsFor(preset.H3QUICConnectionOptions())
 }
@@ -895,6 +897,9 @@ func NewHTTP3TransportWithMASQUE(preset *fingerprint.Preset, dnsCache *dns.Cache
 	// which adds overhead. If outer packets are too small, inner packets get fragmented
 	// and the connection hangs.
 	t.quicConfig = t.buildQUICConfig(clientHelloID, quicIdleTimeout, 1350)
+	// The proxy sends the tunnel's packets as DATAGRAM frames, which it may
+	// only do if this connection advertises them.
+	h3build.AdvertiseDatagrams(t.quicConfig)
 
 	// Create MASQUE connection
 	masqueConn, err := proxy.NewMASQUEConn(proxyConfig.URL)

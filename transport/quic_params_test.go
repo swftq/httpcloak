@@ -158,13 +158,13 @@ func TestChromeQUICParamsOnlyForChromePresets(t *testing.T) {
 			continue
 		}
 		params := AdditionalTransportParamsForPreset(p, nil, "", 0)
-		got := len(params) > 0
+		got := chromeQUICParams(params) > 0
 		if got != want {
 			verb := "must not"
 			if want {
 				verb = "must"
 			}
-			t.Errorf("%s: %s carry Chrome QUIC transport parameters, got %d of them", name, verb, len(params))
+			t.Errorf("%s: %s carry Chrome QUIC transport parameters, got %d of them", name, verb, chromeQUICParams(params))
 		}
 		if !want {
 			for _, id := range []uint64{0x11, 0x3128} {
@@ -174,6 +174,19 @@ func TestChromeQUICParamsOnlyForChromePresets(t *testing.T) {
 			}
 		}
 	}
+}
+
+// chromeQUICParams counts the Google parameters among a preset's additional
+// transport parameters. A WebKit preset carries one parameter of its own,
+// Safari's 0xff080808, which is not one of them.
+func chromeQUICParams(params map[uint64][]byte) int {
+	n := 0
+	for _, id := range []uint64{0x11, 0x3128, 0x4752} {
+		if _, ok := params[id]; ok {
+			n++
+		}
+	}
+	return n
 }
 
 // google_connection_options is preset-driven, and the preset key has to reach
@@ -273,8 +286,8 @@ func TestConnectionOptionsAbsentFromNonChromePresets(t *testing.T) {
 		if p == nil {
 			continue
 		}
-		if params := AdditionalTransportParamsForPreset(p, nil, "", 0); len(params) != 0 {
-			t.Errorf("%s carries %d Chrome QUIC transport parameters", name, len(params))
+		if n := chromeQUICParams(AdditionalTransportParamsForPreset(p, nil, "", 0)); n != 0 {
+			t.Errorf("%s carries %d Chrome QUIC transport parameters", name, n)
 		}
 		described, err := fingerprint.Describe(name)
 		if err != nil {

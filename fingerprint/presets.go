@@ -662,7 +662,7 @@ type H3FingerprintConfig struct {
 	QUICAllow0RTT             *bool   // nil = true
 	QUICChromeStyleInitial    *bool   // nil = true
 	QUICDisableHelloScramble  *bool   // nil = true
-	QUICTransportParamOrder   string  // "chrome"/"random". "" = "chrome".
+	QUICTransportParamOrder   string  // "chrome"/"random"/"safari". "" = "chrome".
 	QUICConnectionIDLength    *int    // nil = 0 (Chrome empty SCID). Firefox uses 8.
 	QUICMaxDatagramFrameSize  *uint64 // nil = 65536 (Chrome). 0 to use quic-go default (16383).
 	MaxResponseHeaderBytes    *uint64 // nil = 262144
@@ -695,6 +695,26 @@ type H3FingerprintConfig struct {
 	// match.
 	QUICInitialStreamReceiveWindow     *uint64 // nil = quic-go default. iOS Chrome sends 2097152.
 	QUICInitialConnectionReceiveWindow *uint64 // nil = quic-go default. iOS Chrome sends 16777216.
+
+	// QUICActiveConnectionIDLimit is the active_connection_id_limit the
+	// client advertises, and how many connection IDs it then keeps from the
+	// server. nil, or a value below 2, sends none, as Chrome does: the
+	// default of 2 applies. Safari sends 64.
+	QUICActiveConnectionIDLimit *uint64
+
+	// The shape of the client's Initial packets, which anyone can decrypt.
+	// nil keeps each as quic-go has it, which is Chrome's.
+	//
+	// QUICInitialCryptoDataPerPacket caps the ClientHello bytes in one
+	// Initial packet; nil or 0 fills each packet. Safari's first Initial
+	// carries 999 bytes and padding.
+	//
+	// QUICPacketNumbersFromZero starts the Initial packet numbers at 0 rather
+	// than Chrome's 1, and QUICShortInitialPacketNumbers encodes them in one
+	// byte rather than two. Safari does both.
+	QUICInitialCryptoDataPerPacket *uint16
+	QUICPacketNumbersFromZero      *bool
+	QUICShortInitialPacketNumbers  *bool
 }
 
 // --- H2 Preset Getters ---
@@ -1154,6 +1174,42 @@ func (p *Preset) H3QUICInitialConnectionReceiveWindow() uint64 {
 	return 0
 }
 
+// H3QUICActiveConnectionIDLimit returns the active_connection_id_limit the
+// client advertises. 0 means none is sent, as Chrome sends none.
+func (p *Preset) H3QUICActiveConnectionIDLimit() uint64 {
+	if p.H3Config != nil && p.H3Config.QUICActiveConnectionIDLimit != nil {
+		return *p.H3Config.QUICActiveConnectionIDLimit
+	}
+	return 0
+}
+
+// H3QUICInitialCryptoDataPerPacket returns the most ClientHello bytes one
+// Initial packet carries. 0 fills each packet, as Chrome's do.
+func (p *Preset) H3QUICInitialCryptoDataPerPacket() uint16 {
+	if p.H3Config != nil && p.H3Config.QUICInitialCryptoDataPerPacket != nil {
+		return *p.H3Config.QUICInitialCryptoDataPerPacket
+	}
+	return 0
+}
+
+// H3QUICPacketNumbersFromZero reports whether the Initial packet numbers start
+// at 0. Chrome's start at 1.
+func (p *Preset) H3QUICPacketNumbersFromZero() bool {
+	if p.H3Config != nil && p.H3Config.QUICPacketNumbersFromZero != nil {
+		return *p.H3Config.QUICPacketNumbersFromZero
+	}
+	return false
+}
+
+// H3QUICShortInitialPacketNumbers reports whether the Initial packet numbers
+// take one byte. quic-go's, the default, take two until an ACK arrives.
+func (p *Preset) H3QUICShortInitialPacketNumbers() bool {
+	if p.H3Config != nil && p.H3Config.QUICShortInitialPacketNumbers != nil {
+		return *p.H3Config.QUICShortInitialPacketNumbers
+	}
+	return false
+}
+
 // chromeH2Config returns the explicit H2 fingerprint config for Chrome presets.
 func chromeH2Config() *H2FingerprintConfig {
 	f := false
@@ -1305,18 +1361,55 @@ func safariH2Config() *H2FingerprintConfig {
 
 // safariH3Config returns the explicit H3 fingerprint config for Safari/WebKit presets.
 // Replaces the NoRFC7540Priorities heuristic fallback with explicit values.
+//
+// The QUIC half is Safari 26.3's first flight on macOS 26.3, decrypted from
+// its Initial packets (run-20261121-225724, h3.log:4-15 and lo0.pcap packets
+// 34075 and 34076). It sent:
+//   - two 1200-byte datagrams of one Initial each, with packet numbers 0 and
+//     1 in one byte;
+//   - the ClientHello in order: its first 999 bytes in the first Initial and
+//     the remaining 483 in the second, each followed by padding;
+//   - its transport parameters in an order of its own, which h3build calls
+//     "safari": initial_max_streams_uni 8, active_connection_id_limit 64, an
+//     empty initial_source_connection_id, initial_max_data 16777216, the
+//     three initial_max_stream_data at 2097152, and 0xff080808 = 07, an ID no
+//     RFC assigns.
+//
+// It sent no GREASE parameter, and none of max_idle_timeout,
+// max_udp_payload_size, initial_max_streams_bidi and max_datagram_frame_size.
+//
+// The iOS presets take the same values, since iOS runs the same network
+// stack. The capture of iOS Chrome 148 on iOS 26.4.2 behind c0bdb307 showed
+// the same windows, stream limit and connection-ID limit, and the same four
+// parameters left out. It doesn't say whether the order, 0xff080808, the
+// datagram size or the CRYPTO split are the same on iOS.
 func safariH3Config() *H3FingerprintConfig {
+	t := true
 	f := false
 	qpackCap := uint64(16383)
 	maxField := uint64(0) // Safari omits MAX_FIELD_SECTION_SIZE
+	packetSize := uint16(1200)
+	uniStreams := int64(8)
+	streamWindow := uint64(2097152)
+	connWindow := uint64(16777216)
+	connIDLimit := uint64(64)
+	helloPerPacket := uint16(999)
 	return &H3FingerprintConfig{
-		QPACKMaxTableCapacity:    &qpackCap,
-		MaxFieldSectionSize:      &maxField,
-		EnableDatagrams:          &f,
-		QUICChromeStyleInitial:   &f, // Safari doesn't mimic Chrome's initial packet pattern
-		QUICDisableHelloScramble: &f, // Safari uses default scrambling
-		QUICTransportParamOrder:  "random",
-		SendGreaseFrames:         &f, // Safari doesn't send GREASE frames on control stream
+		QPACKMaxTableCapacity:              &qpackCap,
+		MaxFieldSectionSize:                &maxField,
+		EnableDatagrams:                    &f,
+		QUICChromeStyleInitial:             &f, // Safari doesn't mimic Chrome's initial packet pattern
+		QUICDisableHelloScramble:           &t, // Safari sends the ClientHello in order, SNI and all
+		QUICTransportParamOrder:            "safari",
+		SendGreaseFrames:                   &f, // Safari doesn't send GREASE frames on control stream
+		QUICInitialPacketSize:              &packetSize,
+		QUICMaxIncomingUniStreams:          &uniStreams,
+		QUICInitialStreamReceiveWindow:     &streamWindow,
+		QUICInitialConnectionReceiveWindow: &connWindow,
+		QUICActiveConnectionIDLimit:        &connIDLimit,
+		QUICInitialCryptoDataPerPacket:     &helloPerPacket,
+		QUICPacketNumbersFromZero:          &t,
+		QUICShortInitialPacketNumbers:      &t,
 	}
 }
 

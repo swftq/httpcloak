@@ -391,7 +391,7 @@ The HTTP/3 layer, including the QUIC transport parameters that anchor a Chrome-s
   "quic_allow_0rtt":              true,
   "quic_chrome_style_initial":    true,
   "quic_disable_hello_scramble":  false,
-  "quic_transport_param_order":   "chrome",   // or "random"
+  "quic_transport_param_order":   "chrome",   // or "random", "safari"
   "quic_connection_id_length":    8,
   "quic_max_datagram_frame_size": 65535,
 
@@ -399,7 +399,12 @@ The HTTP/3 layer, including the QUIC transport parameters that anchor a Chrome-s
   "send_grease_frames":           true,
 
   "quic_initial_stream_receive_window":     2097152,
-  "quic_initial_connection_receive_window": 16777216
+  "quic_initial_connection_receive_window": 16777216,
+  "quic_active_connection_id_limit":        64,
+
+  "quic_initial_crypto_data_per_packet": 999,
+  "quic_packet_numbers_from_zero":       true,
+  "quic_short_initial_packet_numbers":   true
 }
 ```
 
@@ -414,14 +419,18 @@ The HTTP/3 layer, including the QUIC transport parameters that anchor a Chrome-s
 | `quic_max_incoming_uni_streams` | int64 | `initial_max_streams_uni`. |
 | `quic_allow_0rtt` | bool | Enable 0-RTT data. |
 | `quic_chrome_style_initial` | bool | Mimic Chrome's first-flight packet shape. |
-| `quic_disable_hello_scramble` | bool | When true, don't permute extensions in QUIC ClientHello. |
-| `quic_transport_param_order` | string | `"chrome"` or `"random"`. Chrome's order is fixed and identifying. |
+| `quic_disable_hello_scramble` | bool | When true, the ClientHello's CRYPTO frames go out in order, as browsers send them. When false, quic-go cuts the hello inside the SNI and sends that piece last. |
+| `quic_transport_param_order` | string | `"chrome"`, `"random"` or `"safari"`. `"chrome"` sends Chrome's set, reshuffled on every connection. `"random"` is quic-go's own fixed order behind a GREASE parameter. `"safari"` sends exactly the eight parameters Safari 26.3 sends, in its order and with no GREASE: `initial_max_streams_uni`, `active_connection_id_limit`, `initial_source_connection_id`, `initial_max_data`, the three `initial_max_stream_data`, and `0xff080808` = `07`. |
 | `quic_connection_id_length` | int | Length of source connection IDs. |
 | `quic_max_datagram_frame_size` | uint64 | Max DATAGRAM frame size. |
 | `max_response_header_bytes` | uint64 | Per-response header size cap. |
 | `send_grease_frames` | bool | Send GREASE frames between real frames. |
-| `quic_initial_stream_receive_window` | uint64 | `initial_max_stream_data_*`. iOS Safari uses 2 MiB; Chrome desktop uses different values. |
-| `quic_initial_connection_receive_window` | uint64 | `initial_max_data`. iOS Safari uses 16 MiB. |
+| `quic_initial_stream_receive_window` | uint64 | `initial_max_stream_data_*`. Safari uses 2 MiB; Chrome desktop uses different values. |
+| `quic_initial_connection_receive_window` | uint64 | `initial_max_data`. Safari uses 16 MiB. |
+| `quic_active_connection_id_limit` | uint64 | `active_connection_id_limit`, and how many connection IDs the client keeps from the server. At least 2; omitted, none is sent, as Chrome sends none. Safari sends 64. |
+| `quic_initial_crypto_data_per_packet` | uint16 | The most ClientHello bytes one Initial packet carries. Omitted, each Initial is filled, as Chrome's are. Safari's first Initial carries 999 bytes and padding. |
+| `quic_packet_numbers_from_zero` | bool | Start the Initial packet numbers at 0, as Safari does. Omitted, they start at 1, as Chrome's do. |
+| `quic_short_initial_packet_numbers` | bool | Encode the Initial packet numbers in one byte, as Safari does. Omitted, they take two until the server acknowledges a packet. |
 
 Omit a field (nil) and the quic-go default applies. The library only writes a slot when the spec asks for it.
 
