@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Preset keys for the shape of a QUIC Initial**: `http3.quic_transport_param_order` takes `"safari"`, which sends exactly Safari's transport parameters in Safari's order, with no GREASE parameter. Four new `http3` keys go with it, and leaving them out keeps what every preset sent before. `quic_active_connection_id_limit` sets the `active_connection_id_limit` the client advertises, and the number of connection IDs it then keeps. `quic_initial_crypto_data_per_packet` caps the ClientHello bytes in one Initial packet. `quic_packet_numbers_from_zero` starts the Initial packet numbers at 0 instead of 1, and `quic_short_initial_packet_numbers` encodes them in one byte instead of two.
+
+### Fixed
+
+- **The WebKit presets start HTTP/3 the way Safari 26.3 does**: anyone can decrypt a QUIC Initial packet, and the WebKit presets' Initials looked like no Safari's. They now match the two Safari 26.3 sent on macOS 26.3:
+  - 1200-byte datagrams;
+  - packet numbers 0 and 1, in one byte;
+  - the ClientHello in order, 999 bytes of it in the first packet;
+  - Safari's own transport parameters, in its order: `initial_max_streams_uni` 8, `active_connection_id_limit` 64, `initial_max_data` 16 MiB, 2 MiB for each stream, and a private `0xff080808`.
+
+  Before, they sent 1250-byte datagrams and quic-go's fixed parameter order behind a GREASE parameter. Most had Chrome-sized windows, all had a `max_idle_timeout`, `max_udp_payload_size`, `initial_max_streams_bidi` and `max_datagram_frame_size` that Safari doesn't send, and to a host name they cut the ClientHello inside the server name. This covers `safari-18` (`safari-latest`), `safari-18-ios` and every iOS Chrome preset, `chrome-143-ios` to `chrome-155-ios` and their aliases. `safari-17-ios` and `safari-26-ios` send it when HTTP/3 is forced. The iOS presets take macOS Safari's values: an iOS Chrome capture agrees on the windows and limits, but the order and packet layout haven't been seen on iOS. A MASQUE tunnel's outer connection still advertises `max_datagram_frame_size`, which the tunnel needs. Chromium presets are unchanged.
+
 ## [1.7.4] - 2026-11-15
 
 ### Added
